@@ -49,7 +49,7 @@ const jit = (c, j = 7) => [c[0] + R(-j, j), c[1] + R(-j, j), c[2] + R(-j, j)];
 const cv = document.getElementById('art'); cv.width = W; cv.height = H;
 const ctx = cv.getContext('2d');
 const mk = (w = W, h = H) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-ctx.fillStyle = '#c4b393'; ctx.fillRect(0, 0, W, H);
+ctx.fillStyle = '#e6dcc6'; ctx.fillRect(0, 0, W, H);
 
 // ---------------------------------------------------------------- 紙の目
 let TOOTH = null; const MASK = {};
@@ -73,7 +73,7 @@ function buildPaper(){
   let acc = 0, lo = 0, hi = 255; for (let v = 0; v < 256; v++){ acc += hist[v]; if (acc < n * .01) lo = v; if (acc < n * .99) hi = v; }
   TOOTH = new Float32Array(n); for (let i = 0; i < n; i++) TOOTH[i] = clamp((d[i * 4] - lo) / (hi - lo + 1), 0, 1);
   // 紙そのもの
-  const pid = ctx.createImageData(W, H), p = pid.data, base = [198, 182, 152];
+  const pid = ctx.createImageData(W, H), p = pid.data, base = [234, 224, 203];
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++){
     const i = y * W + x, t = TOOTH[i], k = 0.86 + 0.2 * t + (vn2(x / 400, y / 400) - .5) * .06;
     p[i * 4] = base[0] * k; p[i * 4 + 1] = base[1] * k; p[i * 4 + 2] = base[2] * k * .98; p[i * 4 + 3] = 255;
@@ -206,6 +206,8 @@ function skyT(x, y){
 // ================================================================ 仕事の列
 const tasks = []; const T = f => tasks.push(f);
 T(buildPaper);
+let PAPERC = null;
+T(() => { PAPERC = mk(); PAPERC.getContext('2d').drawImage(cv, 0, 0); });
 T(() => {
   MASK.full = makeMask(t => .86 + .14 * smooth(.1, .6, t));
   MASK.heavy = makeMask(t => .12 + .88 * smooth(.02, .40, t));
@@ -345,156 +347,6 @@ T(() => pass(g => {
     pastel(g, pathPts(x, y, R(-.01, .01), R(60, 260), 0, 5), R(4, 12), mixc(stickC(Math.min(1, t + .06)), hx('#fbefd6'), .3), (1 - d) * .45); }
 }, { mask: 'heavy' }));
 T(() => smear(g => fingers(g, 80, SUNP[0] - W * .35, HOR - 50, SUNP[0] + W * .35, HOR + 2, 0, [90, 300], [4, 12]), 0, -2, 4, .25, 3));
-T(() => { SKYIMG = ctx.getImageData(0, 0, W, Math.ceil(HOR) + 2).data; });
-// 太陽の下に現れる、まだ名前のない陸地 — 朝日を背にした段々の台地と、幾筋もの細い滝
-T(() => pass(g => {
-  const x0 = SUNP[0] - .36 * W, x1 = SUNP[0] + .3 * W;
-  for (let layer = 2; layer >= 0; layer--){
-    let x = x0 + R(0, 80) + layer * 40;
-    while (x < x1){
-      const w = R(70, 280) * (1 - layer * .2), cx = x + w / 2, near = 1 - clamp(Math.abs(cx - SUNP[0]) / (W * .36), 0, 1);
-      const h = (R(8, 20) + (2 - layer) * 6) * (.55 + near * .8);
-      const yb = HOR + 1, yt = yb - h;
-      // 逆光で沈んだ、ばら色がかった灰。奥の段ほど空に溶ける
-      const col = mixc(mixc(hx('#7d5a52'), hx('#a8796a'), layer / 2), skyAt(cx, yt - 4), .25 + layer * .2);
-      const pts = [[x, yb]]; let xx = x, yy = yt + h * R(.3, .6);
-      pts.push([x + w * R(.03, .08), yy]);
-      xx = x + w * .08;
-      while (xx < x + w * .9){ const st = R(14, 50); yy = clamp(yy + (rnd() < .5 ? -1 : 1) * h * R(.12, .3), yt, yb - h * .15); pts.push([xx + st * .3, yy]); pts.push([xx + st, yy + R(-1, 1)]); xx += st; }
-      pts.push([x + w, yb]);
-      const LP = new Path2D(); LP.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length - 1; i++){ const m = [(pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2]; LP.quadraticCurveTo(pts[i][0], pts[i][1], m[0], m[1]); } LP.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]); LP.closePath();
-      g.fillStyle = css(col, .92); g.fill(LP);
-      // 段の上面だけ、朝凪チョークで光を受ける
-      for (let i = 1; i < pts.length - 2; i += 2){ const p = pts[i], q = pts[i + 1]; if (q[0] - p[0] < 6) continue;
-        pencil(g, p[0], p[1], q[0], q[1], mixc(hx('#f7d9a8'), hx('#fff4de'), near), .75, 1.6); }
-      // 段から海へ落ちる細い滝
-      for (let k = 0; k < w / 26; k++){ const i = 1 + 2 * Math.floor(R(0, (pts.length - 3) / 2)), p = pts[i], q = pts[i + 1] || p; const fx = lerp(p[0], q[0], R(.2, .8));
-        pencil(g, fx, p[1] + 1, fx + R(-.5, .5), yb - 1, mixc(hx('#f3dcb8'), hx('#fff6e6'), near), R(.35, .7), R(.8, 1.5)); }
-      x += w + R(10, 110);
-    }
-  }
-}, { mask: 'heavy' }));
-// 陸地の裾にかかる、うすい朝もや
-T(() => pass(g => {
-  for (let i = 0; i < 260; i++){ const x = R(SUNP[0] - .4 * W, SUNP[0] + .35 * W), y = HOR - R(0, 10);
-    pastel(g, pathPts(x, y, R(-.01, .01), R(60, 220), 0, 5), R(4, 9), mixc(skyAt(x, y - 20), hx('#fbefd6'), .5), .45); }
-}, { mask: 'med' }));
-T(() => { SKYIMG = ctx.getImageData(0, 0, W, Math.ceil(HOR) + 2).data; });
-// ---------------------------------------------------------------- 4b. 水平線の巨大な多段トラス橋（何代もの手が積み上げた、まだ建設中の骨組み）
-T(() => pass(g => {
-  const xa = SUNP[0] + .12 * W, xb = W + 60, U = x => clamp((x - xa) / (xb - xa), 0, 1);
-  // 上の輪郭は段々に：区画ごとに高さが違う（建てられた時代が違う）
-  const steps = []; for (let x = xa; x < xb; x += R(90, 260)) steps.push([x, lerp(50, H * .3, Math.pow(U(x), .7)) * R(.7, 1.1)]);
-  const hAt = x => { let h = steps[0][1]; for (const st of steps) if (x >= st[0]) h = st[1]; return h; };
-  const fade = y => smooth(HOR + 4, HOR - 70, y);
-  const col = (x, y) => mixc(mixc(hx('#4f3a37'), hx('#6e5249'), U(x) * .3 + (1 - fade(y)) * .4), skyAt(x, Math.max(0, y)), .18 + .55 * (1 - fade(y)) + .4 * (1 - clamp((x - xa) / 500, 0, 1)));
-  const lit = y => mixc(hx('#f0c48c'), hx('#fff0d6'), smooth(HOR, HOR - H * .3, y));
-  const cols = []; for (let x = xa; x < xb; x += lerp(14, 44, U(x)) * R(.9, 1.1)) cols.push(x);
-  const th0 = x => lerp(18, 50, U(x));
-  for (let i = 0; i < cols.length - 1; i++){
-    const x0 = cols[i], x1 = cols[i + 1], th = th0(x0), hm = hAt(x0), lw = lerp(1.1, 3.0, U(x0)), heavy = i % 4 === 0;
-    // 下の二段分は大きなアーチの石造り（いちばん古い層）
-    const ya = HOR, yb2 = HOR - th * 2.1, ca = col(x0, yb2);
-    if (hm > th * 2){
-      g.fillStyle = css(ca, .78);
-      g.beginPath(); g.moveTo(x0, ya); g.lineTo(x0, yb2); g.lineTo(x1, yb2); g.lineTo(x1, ya);
-      const rx = (x1 - x0) * .4, cx = (x0 + x1) / 2; g.lineTo(x1 - (x1 - x0) * .1, ya); g.lineTo(x1 - (x1 - x0) * .1, ya - th * 1.2); g.ellipse(cx, ya - th * 1.2, rx, th * .55, 0, 0, Math.PI, true); g.lineTo(x0 + (x1 - x0) * .1, ya); g.closePath(); g.fill();
-      pencil(g, x0, yb2, x1, yb2, ca, .8, lw * 1.2);
-      pencil(g, x0 + 1, ya, x0 + 1, yb2, lit(yb2), .35 * fade(yb2) + .1, Math.max(.8, lw * .5));
-    }
-    // その上は鉄のトラスの段
-    const n = Math.max(0, Math.floor((hm - th * 2.1) / th));
-    for (let k = 0; k < n; k++){
-      const yb = yb2 - k * th, yt = yb - th, top = k === n - 1, c = col(x0, yt);
-      if (top && rnd() < .3) continue;
-      pencil(g, x0, yb, x0, yt, c, .85, lw * (heavy ? 2.2 : 1.2));
-      if (heavy) pencil(g, x0 + lw * 1.2, yb, x0 + lw * 1.2, yt, c, .7, lw * 1.2);
-      pencil(g, x0, yt, x1, yt + R(-.6, .6), c, .85, lw * 1.3);
-      if (rnd() < .85){ pencil(g, x0, yb, x1, yt, c, .55, lw * .75); pencil(g, x1, yb, x0, yt, c, .55, lw * .75); }
-      if (heavy && rnd() < .6) pencil(g, x0 - lw * .8, yb, x0 - lw * .8, yt, lit(yt), .5 * fade(yt) + .2, Math.max(.8, lw * .6));
-      if (top) for (let m = 0; m < 2; m++) if (rnd() < .55){ const a = -Math.PI / 2 + R(-.6, .6), L = th * R(.6, 1.8); pencil(g, x0, yt, x0 + Math.cos(a) * L, yt + Math.sin(a) * L, c, .65, lw * .9); }
-    }
-  }
-  // 段のあいだを横切る朝もや
-  for (let i = 0; i < 170; i++){ const x = R(xa - 60, xb), y = HOR - Math.pow(rnd(), 1.5) * hAt(x) * .95;
-    pastel(g, pathPts(x, y, R(-.02, .02), R(70, 240), 0, 4), R(4, 13), mixc(skyAt(x, y), hx('#f8e6c4'), .3), R(.3, .55), { strands: 3 }); }
-}, { mask: 'heavy' }));
-// 地平線そのもの：いちばん明るい帯をこすってにじませる
-T(() => pass(g => {
-  for (let i = 0; i < 700; i++){ const x = R(-50, W), d = Math.pow(rnd(), 1.6), y = HOR - d * 60 + R(-2, 2), t = skyT(x, y);
-    pastel(g, pathPts(x, y, R(-.01, .01), R(60, 260), 0, 5), R(4, 12), mixc(stickC(Math.min(1, t + .06)), hx('#fbefd6'), .3), (1 - d) * .45); }
-}, { mask: 'heavy' }));
-T(() => smear(g => fingers(g, 80, SUNP[0] - W * .35, HOR - 50, SUNP[0] + W * .35, HOR + 2, 0, [90, 300], [4, 12]), 0, -2, 4, .25, 3));
-T(() => { SKYIMG = ctx.getImageData(0, 0, W, Math.ceil(HOR) + 2).data; });
-// 太陽の下に現れる、まだ名前のない陸地 — 朝日を背にした段々の台地と、幾筋もの細い滝
-T(() => pass(g => {
-  const x0 = SUNP[0] - .36 * W, x1 = SUNP[0] + .3 * W;
-  for (let layer = 2; layer >= 0; layer--){
-    let x = x0 + R(0, 80) + layer * 40;
-    while (x < x1){
-      const w = R(70, 280) * (1 - layer * .2), cx = x + w / 2, near = 1 - clamp(Math.abs(cx - SUNP[0]) / (W * .36), 0, 1);
-      const h = (R(8, 20) + (2 - layer) * 6) * (.55 + near * .8);
-      const yb = HOR + 1, yt = yb - h;
-      // 逆光で沈んだ、ばら色がかった灰。奥の段ほど空に溶ける
-      const col = mixc(mixc(hx('#7d5a52'), hx('#a8796a'), layer / 2), skyAt(cx, yt - 4), .25 + layer * .2);
-      const pts = [[x, yb]]; let xx = x, yy = yt + h * R(.3, .6);
-      pts.push([x + w * R(.03, .08), yy]);
-      xx = x + w * .08;
-      while (xx < x + w * .9){ const st = R(14, 50); yy = clamp(yy + (rnd() < .5 ? -1 : 1) * h * R(.12, .3), yt, yb - h * .15); pts.push([xx + st * .3, yy]); pts.push([xx + st, yy + R(-1, 1)]); xx += st; }
-      pts.push([x + w, yb]);
-      const LP = new Path2D(); LP.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length - 1; i++){ const m = [(pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2]; LP.quadraticCurveTo(pts[i][0], pts[i][1], m[0], m[1]); } LP.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]); LP.closePath();
-      g.fillStyle = css(col, .92); g.fill(LP);
-      // 段の上面だけ、朝凪チョークで光を受ける
-      for (let i = 1; i < pts.length - 2; i += 2){ const p = pts[i], q = pts[i + 1]; if (q[0] - p[0] < 6) continue;
-        pencil(g, p[0], p[1], q[0], q[1], mixc(hx('#f7d9a8'), hx('#fff4de'), near), .75, 1.6); }
-      // 段から海へ落ちる細い滝
-      for (let k = 0; k < w / 26; k++){ const i = 1 + 2 * Math.floor(R(0, (pts.length - 3) / 2)), p = pts[i], q = pts[i + 1] || p; const fx = lerp(p[0], q[0], R(.2, .8));
-        pencil(g, fx, p[1] + 1, fx + R(-.5, .5), yb - 1, mixc(hx('#f3dcb8'), hx('#fff6e6'), near), R(.35, .7), R(.8, 1.5)); }
-      x += w + R(10, 110);
-    }
-  }
-}, { mask: 'heavy' }));
-// 陸地の裾にかかる、うすい朝もや
-T(() => pass(g => {
-  for (let i = 0; i < 260; i++){ const x = R(SUNP[0] - .4 * W, SUNP[0] + .35 * W), y = HOR - R(0, 10);
-    pastel(g, pathPts(x, y, R(-.01, .01), R(60, 220), 0, 5), R(4, 9), mixc(skyAt(x, y - 20), hx('#fbefd6'), .5), .45); }
-}, { mask: 'med' }));
-T(() => { SKYIMG = ctx.getImageData(0, 0, W, Math.ceil(HOR) + 2).data; });
-// ---------------------------------------------------------------- 4b. 水平線の巨大な多段トラス橋（何代もの手が積み上げた、まだ建設中の骨組み）
-T(() => pass(g => {
-  const xa = SUNP[0] + .1 * W, xb = W + 40;
-  const hAt = x => { const u = clamp((x - xa) / (xb - xa), 0, 1); return lerp(30, H * .27, Math.pow(u, .75)) * (.92 + .16 * vn1(u * 5 + 2)); };
-  const mist = y => smooth(HOR, HOR - 60, y);                         // 足元はもやに溶ける
-  const col = (x, y) => mixc(mixc(hx('#7a5c56'), hx('#9c7a6c'), 1 - smooth(HOR - H * .3, HOR, y)), skyAt(x, y), .35 + .45 * (1 - mist(y)) + .25 * (1 - clamp((x - xa) / 600, 0, 1)));
-  const lit = (x, y) => mixc(hx('#f3cd98'), hx('#fff1d8'), smooth(HOR, HOR - H * .3, y));
-  // 柱の並び：手前（右）ほど間隔が広い
-  const cols = []; for (let x = xa; x < xb; x += lerp(9, 30, clamp((x - xa) / (xb - xa), 0, 1)) * R(.85, 1.15)) cols.push(x);
-  const tierH = x => lerp(16, 46, clamp((x - xa) / (xb - xa), 0, 1));
-  for (let i = 0; i < cols.length - 1; i++){
-    const x0 = cols[i], x1 = cols[i + 1], hm = (hAt(x0) + hAt(x1)) / 2, th = tierH(x0), n = Math.max(1, Math.floor(hm / th));
-    for (let k = 0; k < n; k++){
-      const yb = HOR - k * th, yt = yb - th, top = k === n - 1;
-      if (top && rnd() < .35) continue;                                // 最上段はまだ組みかけ
-      const c = col(x0, yt), lw = lerp(.7, 1.8, clamp((x0 - xa) / (xb - xa), 0, 1));
-      // 脚（すこし内へ傾く）と、段ごとの桁
-      pencil(g, x0, yb, x0 + th * .04, yt, c, .75, lw * 1.3);
-      pencil(g, x0, yt, x1, yt + R(-.6, .6), c, .8, lw * 1.5);
-      if (k % 3 === 0) pencil(g, x0, yt + lw * 1.6, x1, yt + lw * 1.6, c, .5, lw * .8);
-      // 筋交い（X）— ところどころ省いて、手で描いた密度のむら
-      if (rnd() < .82){ pencil(g, x0, yb, x1, yt, c, .45, lw * .7); pencil(g, x1, yb, x0, yt, c, .45, lw * .7); }
-      // 下の三段はアーチをくぐらせる
-      if (k < 3 && x1 - x0 > 12){ const P = arcPts((x0 + x1) / 2, yb, (x1 - x0) * .45, Math.PI, Math.PI, 8, th / ((x1 - x0) * .45) * .7); pencilPath(g, P, c, .55, lw); }
-      // 太陽の側（左）の縁だけ、朝凪チョークで光る
-      if (rnd() < .5) pencil(g, x0 - lw * .6, yb - th * .1, x0 - lw * .6 + th * .04, yt, lit(x0, yt), .55 * mist(yt) + .2, Math.max(.7, lw * .6));
-      if (top){   // 組みかけの部材が空へ突き出す
-        for (let m = 0; m < 2; m++) if (rnd() < .5){ const a = -Math.PI / 2 + R(-.5, .5), L = th * R(.6, 1.6); pencil(g, x0, yt, x0 + Math.cos(a) * L, yt + Math.sin(a) * L, c, .55, lw * .8); }
-      }
-    }
-  }
-  // 段のあいだを横切る朝もやの帯
-  for (let i = 0; i < 140; i++){ const x = R(xa - 40, xb), y = HOR - Math.pow(rnd(), 1.6) * hAt(x) * .9;
-    pastel(g, pathPts(x, y, R(-.02, .02), R(60, 220), 0, 4), R(4, 12), mixc(skyAt(x, y), hx('#f8e6c4'), .35), R(.3, .6), { strands: 3 }); }
-}, { mask: 'med' }));
 
 // ---------------------------------------------------------------- 5. 映り込み用の下絵（鏡像の橋と電車）— 海の筆致がここから色を拾う
 const REF = mk(), rg = REF.getContext('2d');
@@ -967,6 +819,76 @@ T(() => pass(g => {
       pencil(g, q1[0], q1[1], q2[0], q2[1], fogc(hx(rnd() < .5 ? '#6f6861' : '#e1cdb0'), d, x0), R(.08, .22), Math.max(.6, lwAt(d, .03))); }
     for (let k = 0; k < 6; k++){ const v = R(2.4, 3.0), a = R(0, 12), q1 = G.at(a, HW, v), q2 = G.at(a + R(3, 8), HW, v + R(-.02, .02));
       pencil(g, q1[0], q1[1], q2[0], q2[1], fogc(hx('#f3d7aa'), d, x0), R(.15, .35), Math.max(.6, lwAt(d, .05))); }
+  }
+}, { mask: 'med' }));
+
+// ================================================================ 8b. 行き先：まだ描かれていない場所
+// 線路が向かう先だけ、絵の具が途中で止まり、紙がそのまま残っている。
+const VX = VAN[0] + 30, VY = HOR - 10, VRX = W * .2, VRU = H * .17, VRD = H * .09;
+const inVoid = (x, y) => { const dx = (x - VX) / VRX, dy = (y - VY) / (y < VY ? VRU : VRD); return dx * dx + dy * dy; };
+T(() => {
+  // 「塗り残し」の形：楕円の芯と、横向きの筆致がそこで途切れたぎざぎざの縁
+  const M = mk(), mg = M.getContext('2d');
+  mg.fillStyle = '#000';
+  // 芯：ゆがんだ形（ノイズで半径を揺らす）
+  const core = []; for (let i = 0; i < 90; i++){ const a = i / 90 * 6.283, k = .28 + .42 * fbm(Math.cos(a) * 1.3 + 4, Math.sin(a) * 1.3 + 9, 3);
+    core.push([VX + Math.cos(a) * VRX * k, VY + Math.sin(a) * (Math.sin(a) < 0 ? VRU : VRD) * k * (Math.sin(a) < 0 ? 1 : .8)]); }
+  mg.fill(smoothPath(core));
+  // 縁：横に引いたパステルが、そこで止まった跡。外へ行くほどまばらに、薄く
+  for (let i = 0; i < 2200; i++){
+    const a = R(0, 6.283), rr = Math.pow(R(.15, 1.0), .8), k = .28 + .42 * fbm(Math.cos(a) * 1.3 + 4, Math.sin(a) * 1.3 + 9, 3) + .55 * rr;
+    const x = VX + Math.cos(a) * VRX * k, y = VY + Math.sin(a) * (Math.sin(a) < 0 ? VRU : VRD * .8) * k;
+    const len = R(40, 320) * (1.25 - rr * .6), w = R(2, 10);
+    mg.globalAlpha = Math.pow(1.05 - rr, .8) * R(.5, 1);
+    pastel(mg, pathPts(x - len * R(0, 1), y, R(-.02, .02), len, 0, 4), w, [0, 0, 0], 1, { strands: Math.max(2, Math.round(w / 2)), taper: .6 });
+  }
+  mg.globalAlpha = 1;
+  // 紙の目に引っかかった色だけ少し残す（完全には消えない）
+  mg.globalCompositeOperation = 'destination-out'; mg.globalAlpha = .5; mg.drawImage(MASK.light, 0, 0);
+  const P = mk(), pg = P.getContext('2d');
+  pg.drawImage(PAPERC, 0, 0); pg.globalCompositeOperation = 'destination-in'; pg.drawImage(M, 0, 0);
+  ctx.drawImage(P, 0, 0);
+});
+// 下描き：橋と線路は鉛筆の線になって、紙の白の中へ続いていく
+T(() => pass(g => {
+  const gr = hx('#4a4440'), gl = hx('#6d655d');
+  let prev = null;
+  for (let s = 600; s < SMAX; s += 40){
+    const a = TP(s, -1.95, -.2), b = TP(s, 1.95, -.2), c = TP(s, 0, 0);
+    const v = inVoid(c[0], c[1]); if (v > 1.15){ prev = null; continue; }
+    const fadeIn = clamp((1.15 - v) / .5, 0, 1), dist = clamp(1 - v, 0, 1);
+    if (prev){
+      // 橋の縁の2本は、奥へ行くほど途切れて1本の線路にまとまる
+      if (dist < .7 && rnd() < .9 - dist){ pencil(g, prev.a[0], prev.a[1], a[0], a[1], gr, .5 * fadeIn, 1.1); pencil(g, prev.b[0], prev.b[1], b[0], b[1], gr, .35 * fadeIn, 1); }
+      pencil(g, prev.c[0], prev.c[1], c[0], c[1], gr, .85, 1.6); if (rnd() < .5) pencil(g, prev.c[0], prev.c[1] - 1, c[0], c[1] - 1, gr, .4, 1);
+      if (dist < .55 && (s / 40) % 2 === 0){ const pb = TP(s, 0, -RAILH); pencil(g, a[0], a[1], pb[0], pb[1], gl, .35 * fadeIn, .9); }   // 橋脚は短い縦の線だけ
+    }
+    prev = { a, b, c };
+  }
+  // 水平線は、定規を当てずに軽く引いた一本の線。途中で迷って二重になる
+  for (let k = 0; k < 3; k++){ const y = HOR + R(-1.5, 1.5); let x = VX - VRX * .9;
+    while (x < VX + VRX * .9){ const l = R(60, 220); if (rnd() < .75) pencil(g, x, y + R(-1, 1), x + l, y + R(-1, 1), gr, R(.15, .4), 1); x += l + R(4, 40); } }
+}, { mask: 'med' }));
+// 何かがありそうで、まだ形にならない。探るような線と、消しゴムで消した跡
+T(() => pass(g => {
+  const gr = hx('#5e5650');
+  for (let i = 0; i < 34; i++){
+    const cx = VX + R(-.6, .6) * VRX, cy = VY - R(.05, .75) * VRU, r = R(30, 160), a0 = R(0, 6.283);
+    if (inVoid(cx, cy) > .6) continue;
+    pencilPath(g, arcPts(cx, cy, r, a0, R(.8, 2.6), 14, R(.25, .9)), gr, R(.25, .5), R(.9, 1.6));
+  }
+}, { mask: 'med' }));
+T(() => pass(g => {   // 消した跡：紙の色のパステルでこすって、線を半分だけ消す
+  for (let i = 0; i < 18; i++){ const x = VX + R(-.6, .6) * VRX, y = VY - R(-.2, .7) * VRU; if (inVoid(x, y) > .6) continue;
+    pastel(g, pathPts(x, y, R(-.6, .6), R(40, 120), R(-.02, .02), 5), R(14, 30), hx('#ece3cf'), .55, { taper: .5 }); }
+}, { mask: 'heavy' }));
+// まだ選ばれていない色：紙の端で試すように置いた、いくつかの短い筆致
+T(() => pass(g => {
+  const tries = ['#a9c3a6', '#e8c96a', '#d98d8d', '#7fa9a2', '#f0b07a', '#b9c98f'];
+  for (let i = 0; i < tries.length; i++){
+    const a = -Math.PI * (.15 + .7 * i / (tries.length - 1)) + R(-.1, .1), rr = R(.35, .6);
+    const x = VX + Math.cos(a) * VRX * rr, y = VY + Math.sin(a) * VRU * rr;
+    for (let k = 0; k < 2; k++) pastel(g, pathPts(x + R(-4, 4), y + k * 7, R(-.25, .25), R(30, 70), R(-.02, .02), 4), R(7, 12), hx(tries[i]), R(.75, .95), { taper: .4 });
   }
 }, { mask: 'med' }));
 
