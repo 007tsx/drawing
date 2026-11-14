@@ -1,0 +1,785 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>頂だけが知っている朝</title>
+<style>
+  html,body{margin:0;height:100%;background:#17140f}
+  body{display:flex;align-items:center;justify-content:center;overflow:hidden}
+  canvas{display:block;width:min(100vw,calc(100vh*16/9));height:auto;aspect-ratio:16/9}
+</style>
+</head>
+<body>
+<canvas id="art" aria-label="夜明け前、まだ地上に届かない朝の光を、天へそびえる見知らぬ雲の頂だけが受けている。二つの鳥の群れが空で出会い、並んで飛んでいく。水を張った田の手前で、月見草がひとつ開く。"></canvas>
+<script>
+'use strict';
+/*
+  「頂だけが知っている朝」
+  画材：トーン紙（砂色の中目） / ソフトパステル / 木炭 / 色鉛筆 / ワックスクレヨン
+        ＋オリジナル画材「暁のサンギーヌ」（赤土色のコンテ。雲の受光面と鳥の腹にだけ使う）
+  すべての線はストローク単位で引き、紙の目（トゥース）でかすれさせる。
+  発光・加算合成・shadowBlur・フローフィールドは一切使わない。
+*/
+(() => {
+const W = 2560, H = 1440, HY = Math.round(H * 0.635);   // HY = 地平線
+
+// ---------------------------------------------------------------- 乱数とノイズ
+let seed = 1114 * 7 + 3;
+function rnd(){ seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+const R = (a, b) => a + (b - a) * rnd();
+const gauss = () => { let u = 0; for (let i = 0; i < 4; i++) u += rnd(); return (u - 2) / 0.577; };
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const PERM = new Float32Array(2048); for (let i = 0; i < 2048; i++) PERM[i] = rnd();
+function vn1(x){ const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return lerp(PERM[i & 2047], PERM[(i + 1) & 2047], u); }
+function h2(i, j){ let h = (i * 374761393 + j * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function vn2(x, y){ const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+  return lerp(lerp(h2(i, j), h2(i + 1, j), u), lerp(h2(i, j + 1), h2(i + 1, j + 1), u), v); }
+function fbm(x, y, o = 4){ let s = 0, a = .5, f = 1, n = 0; for (let k = 0; k < o; k++){ s += a * vn2(x * f + k * 17.3, y * f - k * 9.1); n += a; a *= .5; f *= 2.03; } return s / n; }
+
+// ---------------------------------------------------------------- 色
+const hx = h => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+const mixc = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+const css = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const jit = (c, j = 7) => [c[0] + R(-j, j), c[1] + R(-j, j), c[2] + R(-j, j)];
+const pick = a => a[Math.floor(rnd() * a.length)];
+
+// 空のパステル棒（離散的な「手持ちの棒」から選ぶ）
+const SK = [
+  ['#1e1b1a', 0.00], ['#2a2c28', 0.08], ['#3a3331', 0.17], ['#523835', 0.27], ['#6e433d', 0.36],
+  ['#8b4f43', 0.45], ['#a85b40', 0.54], ['#c56c41', 0.63], ['#d9834c', 0.71], ['#e69c63', 0.79],
+  ['#eeb57e', 0.86], ['#f1cc98', 0.92], ['#f3dfb2', 0.97], ['#f5ead0', 1.01]
+].map(([h, t]) => [hx(h), t]);
+function stickF(t){ if (t <= SK[0][1]) return 0; for (let i = 0; i < SK.length - 1; i++) if (t <= SK[i + 1][1]) return i + (t - SK[i][1]) / (SK[i + 1][1] - SK[i][1]); return SK.length - 1; }
+function stick(t, j = .5){ return SK[clamp(Math.round(stickF(t) + gauss() * j), 0, SK.length - 1)][0]; }
+function skyT(x, y){
+  const dx = (x - 0.86 * W) / (1.25 * W), dy = (y - 0.70 * H) / (0.80 * H);
+  let t = 1 - Math.sqrt(dx * dx + dy * dy) * 0.94;
+  t += (fbm(x / 900, y / 160, 3) - .5) * 0.13;   // 横に引き伸ばされた色のむら
+  return clamp(t, 0, 1);
+}
+
+// ---------------------------------------------------------------- キャンバス
+const cv = document.getElementById('art'); cv.width = W; cv.height = H;
+const ctx = cv.getContext('2d');
+const mk = (w = W, h = H) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+ctx.fillStyle = '#b69c78'; ctx.fillRect(0, 0, W, H);
+
+// ---------------------------------------------------------------- 紙の目
+let TOOTH = null; const MASK = {};
+function buildPaper(){
+  const c = mk(), g = c.getContext('2d');
+  g.fillStyle = '#808080'; g.fillRect(0, 0, W, H);
+  const octs = [[W / 170, 1], [W / 40, .22], [W / 9, .18], [W / 3.2, .35], [W / 1.7, .55], [W / 1.15, .45]];
+  for (const [res, a] of octs){
+    const w = Math.ceil(res), h = Math.ceil(res * H / W), s = mk(w, h), sg = s.getContext('2d'), id = sg.createImageData(w, h);
+    for (let i = 0; i < w * h; i++){ const v = rnd() * 255; id.data[i * 4] = id.data[i * 4 + 1] = id.data[i * 4 + 2] = v; id.data[i * 4 + 3] = 255; }
+    sg.putImageData(id, 0, 0); g.globalAlpha = a; g.imageSmoothingEnabled = true; g.drawImage(s, 0, 0, W, H);
+  }
+  g.globalAlpha = 1;
+  for (let i = 0; i < 14000; i++){   // 繊維
+    const x = R(0, W), y = R(0, H), a = R(0, 6.283), l = R(5, 38);
+    g.strokeStyle = rnd() < .5 ? 'rgba(255,255,255,.11)' : 'rgba(0,0,0,.09)'; g.lineWidth = R(.5, 1.4);
+    g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a) * l * .5 + R(-5, 5), y + Math.sin(a) * l * .5 + R(-5, 5), x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+  const d = g.getImageData(0, 0, W, H).data, n = W * H;
+  const hist = new Uint32Array(256); for (let i = 0; i < n; i++) hist[d[i * 4]]++;
+  let acc = 0, lo = 0, hi = 255; for (let v = 0; v < 256; v++){ acc += hist[v]; if (acc < n * .01) lo = v; if (acc < n * .99) hi = v; }
+  TOOTH = new Float32Array(n); for (let i = 0; i < n; i++) TOOTH[i] = clamp((d[i * 4] - lo) / (hi - lo + 1), 0, 1);
+  // 紙そのもの
+  const pid = ctx.createImageData(W, H), p = pid.data, base = [182, 157, 122];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++){
+    const i = y * W + x, t = TOOTH[i], k = 0.86 + 0.2 * t + (vn2(x / 400, y / 400) - .5) * .06;
+    p[i * 4] = base[0] * k; p[i * 4 + 1] = base[1] * k; p[i * 4 + 2] = base[2] * k * .98; p[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(pid, 0, 0);
+}
+function makeMask(fn){
+  const c = mk(), g = c.getContext('2d'), id = g.createImageData(W, H), a = id.data;
+  for (let i = 0; i < W * H; i++) a[i * 4 + 3] = 255 * fn(TOOTH[i]);
+  g.putImageData(id, 0, 0); return c;
+}
+
+// ---------------------------------------------------------------- 描画パス
+const LAY = mk(), lg = LAY.getContext('2d');
+function pass(fn, { mask = 'med', op = 'source-over', alpha = 1, clip = null } = {}){
+  lg.setTransform(1, 0, 0, 1, 0, 0); lg.globalCompositeOperation = 'source-over'; lg.globalAlpha = 1; lg.filter = 'none';
+  lg.clearRect(0, 0, W, H);
+  lg.save(); fn(lg); lg.restore();
+  if (mask){ lg.save(); lg.globalCompositeOperation = 'destination-in'; lg.drawImage(MASK[mask], 0, 0); lg.restore(); }
+  ctx.save(); if (clip){ clip(ctx); ctx.clip(); }
+  ctx.globalCompositeOperation = op; ctx.globalAlpha = alpha; ctx.drawImage(LAY, 0, 0); ctx.restore();
+}
+const SM = mk(), smg = SM.getContext('2d');
+function smear(clipFn, dx, dy, reps, al, blur = 0){   // 指でこする
+  smg.clearRect(0, 0, W, H); smg.drawImage(cv, 0, 0);
+  ctx.save(); ctx.beginPath(); clipFn(ctx); ctx.clip();
+  if (blur) ctx.filter = `blur(${blur}px)`;
+  for (let i = 1; i <= reps; i++){ ctx.globalAlpha = al; ctx.drawImage(SM, dx * i, dy * i); }
+  ctx.restore();
+}
+function fingers(g, n, x0, y0, x1, y1, ang = 0, rx = [50, 190], ry = [8, 26]){
+  for (let i = 0; i < n; i++){ const x = R(x0, x1), y = R(y0, y1); g.moveTo(x + 300, y); g.ellipse(x, y, R(rx[0], rx[1]), R(ry[0], ry[1]), ang + R(-.08, .08), 0, 6.283); }
+}
+
+// ---------------------------------------------------------------- 画材の基本ストローク
+function pathPts(x, y, ang, len, curv, n){ const p = []; let a = ang; const st = len / n; for (let i = 0; i <= n; i++){ p.push([x, y]); a += curv + R(-.025, .025); x += Math.cos(a) * st; y += Math.sin(a) * st; } return p; }
+function arcPts(cx, cy, rr, a0, span, n, sq = 1){ const p = []; for (let i = 0; i <= n; i++){ const a = a0 + span * i / n, k = R(.975, 1.025); p.push([cx + Math.cos(a) * rr * k, cy + Math.sin(a) * rr * sq * k]); } return p; }
+
+// パステル（棒の側面）：束になった細い筋の集まり。筋ごとに筆圧が違う
+function pastel(g, pts, w, col, al = .8, { strands = 0, taper = .3, lw = [1.2, 3.2] } = {}){
+  const n = strands || Math.max(3, Math.round(w / 2.2)), N = pts.length;
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  for (let s = 0; s < n; s++){
+    const off = (n === 1 ? 0 : (s / (n - 1) - .5)) * w + R(-1, 1);
+    const st = Math.floor(R(0, taper) * N * .5), en = N - 1 - Math.floor(R(0, taper) * N * .5);
+    if (en <= st) continue;
+    g.strokeStyle = css(jit(col, 6), al * R(.3, 1)); g.lineWidth = R(lw[0], lw[1]);
+    g.beginPath();
+    for (let i = st; i <= en; i++){
+      const p = pts[i], q = pts[Math.min(i + 1, N - 1)], pp = pts[Math.max(i - 1, 0)];
+      const dx = q[0] - pp[0], dy = q[1] - pp[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
+      const pr = .72 + .28 * Math.sin(Math.PI * i / (N - 1 || 1)), o = off * pr;
+      const X = p[0] + nx * o, Y = p[1] + ny * o; i === st ? g.moveTo(X, Y) : g.lineTo(X, Y);
+    }
+    g.stroke();
+  }
+}
+// 鉛筆／色鉛筆：一度引いて、真ん中をもう一度なぞる（筆圧の重なり）
+function pencilPath(g, pts, col, al, w){
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const draw = (a, b, alpha, lw) => { g.strokeStyle = css(col, alpha); g.lineWidth = lw; g.beginPath();
+    for (let i = a; i <= b; i++){ const p = pts[i], X = p[0] + R(-.4, .4), Y = p[1] + R(-.4, .4); i === a ? g.moveTo(X, Y) : g.lineTo(X, Y); } g.stroke(); };
+  const n = pts.length - 1; if (n < 1) return;
+  draw(0, n, al * .55, w * .8);
+  if (n >= 2){ const a = Math.floor(n * R(0, .3)), b = Math.max(a + 1, Math.ceil(n * R(.55, 1))); draw(a, Math.min(b, n), al * .6, w); }
+}
+function pencil(g, x1, y1, x2, y2, col, al, w){
+  const L = Math.hypot(x2 - x1, y2 - y1) || 1, n = Math.max(2, Math.round(L / 18)), bend = R(-1, 1) * L * .03;
+  const nx = -(y2 - y1) / L, ny = (x2 - x1) / L, p = [];
+  for (let i = 0; i <= n; i++){ const t = i / n, b = Math.sin(Math.PI * t) * bend; p.push([x1 + (x2 - x1) * t + nx * b, y1 + (y2 - y1) * t + ny * b]); }
+  pencilPath(g, p, col, al, w);
+}
+function hatch(g, x0, y0, x1, y1, ang, sp, col, al, w, seg = [25, 80], prob = .85){
+  const ca = Math.cos(ang), sa = Math.sin(ang), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, Rr = Math.hypot(x1 - x0, y1 - y0) / 2;
+  for (let o = -Rr; o <= Rr; o += sp * R(.6, 1.4)){
+    let t = -Rr + R(0, seg[1]);
+    while (t < Rr){ const l = R(seg[0], seg[1]), px = cx - sa * o + ca * t, py = cy + ca * o + sa * t;
+      if (rnd() < prob) pencil(g, px, py, px + ca * l, py + sa * l, jit(col, 6), al * R(.55, 1), w * R(.8, 1.2));
+      t += l + R(3, 30); }
+  }
+}
+function smoothPath(pts, closed = true){
+  const p = new Path2D(), n = pts.length, m = i => { const a = pts[(i + n) % n], b = pts[(i + 1) % n]; return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; };
+  const s = m(0); p.moveTo(s[0], s[1]);
+  for (let i = 1; i <= n; i++){ const c = pts[i % n], e = m(i); p.quadraticCurveTo(c[0], c[1], e[0], e[1]); }
+  if (closed) p.closePath(); return p;
+}
+function clipMinus(g, path, dx, dy){ g.clip(minus(path, dx, dy), 'evenodd'); }
+function minus(path, dx, dy){ const p = new Path2D(); p.rect(-50, -50, W + 100, H + 100); p.addPath(path, new DOMMatrix().translate(dx, dy)); return p; }
+
+// ================================================================ シーン
+const tasks = []; const T = f => tasks.push(f);
+
+// ---------------- 1. 紙
+T(buildPaper);
+T(() => {
+  MASK.full = makeMask(t => .86 + .14 * smooth(.1, .6, t));
+  MASK.heavy = makeMask(t => .12 + .88 * smooth(.02, .40, t));
+  MASK.med = makeMask(t => smooth(.22, .62, t));
+  MASK.light = makeMask(t => smooth(.48, .86, t));
+  TOOTH = TOOTH; // 仕上げの粒子にも使う
+});
+
+// ---------------- 2. 空：下塗り（棒の側面で横に寝かせて）
+T(() => pass(g => {
+  for (let y = -40; y < HY + 40; y += 10){
+    let x = -R(0, 220);
+    while (x < W + 60){
+      const len = R(150, 430), w = R(26, 56), t = skyT(x + len / 2, y);
+      pastel(g, pathPts(x, y + R(-6, 6), R(-.035, .028), len, R(-.002, .002), 7), w, stick(t, .28), .92);
+      x += len * R(.42, .78);
+    }
+  }
+}, { mask: 'full' }));
+// 指でこすって色をなじませる（ところどころだけ）
+T(() => smear(g => fingers(g, 260, -100, -20, W + 100, HY + 10, 0), 5, 0, 4, .32, 2));
+// 中塗り：短く、隣の色の棒も混ぜる
+T(() => pass(g => {
+  for (let i = 0; i < 2300; i++){
+    const x = R(-100, W + 50), y = R(-20, HY + 8), len = R(60, 240), w = R(10, 34), t = skyT(x + len / 2, y);
+    pastel(g, pathPts(x, y, R(-.06, .05), len, R(-.004, .004), 6), w, stick(t, .75), .75);
+  }
+}, { mask: 'med' }));
+T(() => smear(g => fingers(g, 160, -100, HY * .45, W + 100, HY + 6, 0, [80, 260], [6, 18]), -6, 0, 3, .28, 3));
+// 地平線付近：光がにじむ層（暖色を何度も重ね、こする）
+T(() => pass(g => {
+  for (let i = 0; i < 900; i++){
+    const x = R(-80, W), y = HY - Math.pow(rnd(), 1.8) * 260, len = R(80, 300), t = skyT(x + len / 2, y) + .04;
+    pastel(g, pathPts(x, y, R(-.02, .02), len, 0, 6), R(8, 26), stick(t, .5), .6);
+  }
+}, { mask: 'heavy' }));
+T(() => smear(g => fingers(g, 120, -50, HY - 240, W + 50, HY + 4, 0, [90, 300], [10, 30]), 0, -3, 5, .22, 5));
+// 色のかけら：ひっかかった棒の粒
+T(() => pass(g => {
+  for (let i = 0; i < 1300; i++){
+    const x = R(-50, W), y = R(-10, HY), t = skyT(x, y);
+    const c = t > .78 && rnd() < .3 ? hx(pick(['#c4c49a', '#b9bf98', '#d6cfa2'])) : stick(t + R(-.12, .12), .9);
+    pastel(g, pathPts(x, y, R(-.08, .06), R(30, 140), R(-.01, .01), 4), R(5, 16), c, .7);
+  }
+}, { mask: 'light' }));
+// 色鉛筆の水平ハッチング（空の暗部にだけ、うっすら）
+T(() => pass(g => {
+  for (let i = 0; i < 2600; i++){
+    const x = R(-50, W), y = R(-10, HY), t = skyT(x, y), len = R(40, 260);
+    const c = t < .5 ? mixc(stick(t, .3), [26, 24, 22], .45) : mixc(stick(t + .08, .3), [250, 230, 200], .25);
+    pencil(g, x, y, x + len, y + R(-6, 6), c, R(.18, .42), R(1, 1.9));
+  }
+}, { mask: 'med' }));
+// 星（ごく少なく、紙に押し付けたパステルの点）
+T(() => pass(g => {
+  for (let i = 0; i < 44; i++){
+    const x = R(0, W * .58), y = R(0, H * .22) * (1 - x / W * .6);
+    if (skyT(x, y) > .2) continue;
+    const s = rnd() < .15 ? R(2.6, 4) : R(1.1, 2.3);
+    g.fillStyle = css(hx(pick(['#efe4c8', '#e9d6b2', '#f2e9d6'])), R(.5, .9));
+    g.beginPath(); g.ellipse(x, y, s, s * R(.6, 1), R(0, 3), 0, 6.283); g.fill();
+  }
+}, { mask: 'heavy' }));
+
+// ---------------- 3. 横に流れる薄い雲（受光部はセル塗りのような硬い縁）
+function lens(cx, cy, len, th, skew){
+  const n = 46, top = [], bot = [], ph = R(0, 99);
+  for (let i = 0; i <= n; i++){ const u = i / n, x = cx - len / 2 + len * u, env = Math.pow(Math.sin(Math.PI * u), .55);
+    top.push([x, cy - th * env * (vn1(ph + u * 7) * .9 + .35) + skew * u]); bot.push([x, cy + th * .45 * env * (vn1(ph + 30 + u * 11) * .7 + .45) + skew * u]); }
+  return smoothPath(top.concat(bot.reverse()));
+}
+const STREAKS = [];
+for (let i = 0; i < 9; i++){
+  const cy = lerp(H * .05, H * .52, Math.pow(rnd(), .9)), cx = R(-.15, .75) * W;
+  STREAKS.push({ cx, cy, len: R(.18, .55) * W * (1 - cy / H * .4), th: R(7, 30) * (1 - cy / H * .5), skew: R(-30, 18) });
+}
+T(() => pass(g => {
+  for (const s of STREAKS){
+    const P = lens(s.cx, s.cy, s.len, s.th, s.skew), t = skyT(s.cx, s.cy);
+    const body = mixc(stick(t - .14, .25), [40, 36, 34], .2), litc = stick(Math.min(1, t + .2), .3), hi = rnd() < .5 ? stick(Math.min(1, t + .3), .2) : null;
+    g.save(); g.clip(P);
+    g.fillStyle = css(body, .35); g.fill(P);
+    for (let k = 0; k < s.len / 14; k++){ const x = s.cx - s.len / 2 + R(-40, s.len), y = s.cy + R(-s.th * 1.1, s.th * .5);
+      pastel(g, pathPts(x - 60, y, R(-.025, .02), R(50, 220), 0, 5), R(4, 12), jit(rnd() < .25 ? stick(t - .05, .4) : body, 10), R(.5, .85)); }
+    clipMinus(g, P, 0, -Math.max(3, s.th * .2));
+    for (let k = 0; k < s.len / 18; k++){ const x = s.cx - s.len / 2 + R(-40, s.len), y = s.cy + s.th * R(0, .5) + s.skew * ((x - s.cx + s.len / 2) / s.len);
+      pastel(g, pathPts(x - 40, y, R(-.02, .02), R(30, 160), 0, 5), R(3, 8), jit(litc, 10), R(.55, .95)); }
+    if (hi){ clipMinus(g, P, 0, -Math.max(1.5, s.th * .08));
+      for (let k = 0; k < s.len / 40; k++){ const x = s.cx - s.len / 2 + R(0, s.len), y = s.cy + s.th * R(.1, .5) + s.skew * ((x - s.cx + s.len / 2) / s.len);
+        pencil(g, x, y, x + R(20, 90), y + R(-1, 1), hi, R(.4, .8), R(1.2, 2.4)); } }
+    g.restore();
+  }
+}, { mask: 'heavy' }));
+
+// ---------------- 4. そびえる見知らぬ雲
+const CB = { x: .79 * W, y: HY + 10 }, CTp = { x: .64 * W, y: -.2 * H };
+const spine = s => ({ x: CB.x + (CTp.x - CB.x) * Math.pow(s, 1.3) + .03 * W * Math.sin(Math.PI * s), y: lerp(CB.y, CTp.y, s) });
+const hwL = s => W * (.18 - .07 * s) + W * .035 * Math.sin(Math.PI * smooth(.45, .9, s));
+const hwR = s => W * (.17 - .07 * s);
+const shadowY = x => H * .50 + (x - .7 * W) * .08 + 16 * (vn1(x / 140) - .5);   // 地球の影の境目
+function lobeShape(cx, cy, r, flat){
+  const n = 72, ph = R(0, 50), k = Math.floor(R(5, 9)), pts = [];
+  for (let i = 0; i < n; i++){ const a = i / n * 6.283;
+    let rr = r * (.84 + .3 * fbm(Math.cos(a) * 1.7 + ph, Math.sin(a) * 1.7 + ph, 3) + .08 * Math.abs(Math.sin(a * k * .5 + ph)));
+    let y = Math.sin(a) * rr; if (y > 0) y *= flat;
+    pts.push([cx + Math.cos(a) * rr, cy + y]); }
+  return smoothPath(pts);
+}
+const LOBES = [];
+function addLobe(x, y, r, s, u){
+  if (y + r < -20) return;
+  const ld = [-1, -.14];
+  LOBES.push({ x, y, r, s, u, ld, P: lobeShape(x, y, r, s < .25 ? .55 : .88) });
+}
+for (let i = 0; i < 165; i++){
+  const s = Math.pow(rnd(), 1.1) * .82, side = rnd() < .5 ? -1 : 1, u = side * Math.pow(rnd(), .4);
+  const sp = spine(s), hw = u < 0 ? hwL(s) : hwR(s);
+  addLobe(sp.x + u * hw * .86, sp.y + R(-30, 30), W * R(.03, .068) * (1 - .25 * s) * (Math.abs(u) < .5 ? 1.3 : 1), s, u);
+}
+for (let i = 0; i < 130; i++){   // 縁のこぶ：カリフラワーのような輪郭
+  const s = R(0, .82), side = rnd() < .6 ? 1 : -1, sp = spine(s), hw = side < 0 ? hwL(s) : hwR(s);
+  addLobe(sp.x + side * hw * R(.93, 1.08), sp.y + R(-30, 30), W * R(.011, .03), s, side * 1.05);
+}
+LOBES.sort((a, b) => (Math.abs(a.u) - Math.abs(b.u)) + (b.r - a.r) * .002);
+const CORE = (() => { const L = [], Rr = [];
+  for (let i = 0; i <= 40; i++){ const s = i / 40 * .9, p = spine(s), k = .82 * (.55 + .45 * smooth(0, .16, s)); L.push([p.x - hwL(s) * k, p.y]); Rr.push([p.x + hwR(s) * k, p.y]); }
+  return smoothPath(L.concat(Rr.reverse())); })();
+
+function inLobeStrokes(g, lb, col, n, j = 8){
+  for (let k = 0; k < n; k++){
+    const a0 = R(0, 6.283), rr = lb.r * R(.25, .95);
+    pastel(g, arcPts(lb.x, lb.y, rr, a0, R(.5, 1.3) * (rnd() < .5 ? 1 : -1), 6), lb.r * R(.1, .22), jit(col, j), R(.45, .8), { taper: .4 });
+  }
+}
+// v = 0 : 地球の影の中（まだ夜）   v = 1 : 頂に届いた朝
+const isLit = lb => lb.y - lb.r * .25 < shadowY(lb.x);
+function drawCloud(g){
+  for (const v of [0, 1]){
+    const coreC = v ? hx('#7c4741') : hx('#66524b');
+    g.save(); clipLitPath(g, v); g.clip(); g.clip(CORE);
+    g.fillStyle = css(coreC); g.fill(CORE);
+    for (let i = 0; i < 90; i++){ const x = R(.55, .98) * W, y = R(-50, HY);
+      pastel(g, pathPts(x, y, R(-1.9, -1.2), R(80, 240), R(-.01, .01), 6), R(20, 50), jit(coreC, 10), .6); }
+    g.restore();
+  }
+  const order = LOBES.filter(isLit).concat(LOBES.filter(l => !isLit(l)));   // 影の中の雲は手前に重なる
+  for (const lb of order){
+    const v = isLit(lb) ? 1 : 0;
+    const hgt = clamp(1 - lb.y / HY, 0, 1), side = smooth(-1.1, 1.1, lb.u);
+    let base, mid, hi, ld = lb.ld, d1;
+    if (!v){
+      base = mixc(jit(hx('#6e5650'), 5), hx('#6f6359'), R(0, .3));
+      mid = mixc(hx('#8a5f52'), hx('#a86e56'), smooth(.0, .5, 1 - hgt));   // 下から地平の明かりを受けた縁
+      ld = [-.35, -1]; d1 = lb.r * R(.12, .22);
+    } else {
+      base = mixc(mixc(hx(pick(['#6a3b38', '#733f39', '#5f3a37'])), hx(pick(['#a0574a', '#a95f4c', '#965346'])), Math.pow(hgt, .8)), hx('#544240'), (1 - side) * .3);
+      base = jit(base, 6);
+      mid = jit(mixc(mixc(hx('#b9583a'), hx('#e48a55'), Math.pow(hgt, 1.1)), hx('#a65a46'), (1 - side) * .3), 6);
+      hi = jit(mixc(hx('#e8955c'), hx('#f5d6a4'), Math.pow(hgt, 1.1)), 5);
+      d1 = lb.r * R(.8, 1.2) * lerp(.2, .62, Math.pow(hgt, .7)) * lerp(.55, 1.6, side);
+    }
+    g.save(); g.clip(lb.P);
+    g.fillStyle = css(base); g.fill(lb.P);
+    inLobeStrokes(g, lb, base, 5);
+    // 受光部（セル塗りの硬い境界）
+    g.save(); clipMinus(g, lb.P, ld[0] * d1, ld[1] * d1);
+    g.fillStyle = css(mid, v ? .8 : .97); g.fill(lb.P);
+    inLobeStrokes(g, lb, mid, 4, 9);
+    if (!v){
+      g.restore(); g.save(); g.clip(lb.P);
+      const d3 = lb.r * R(.06, .12); clipMinus(g, lb.P, .25 * d3, d3);
+      g.fillStyle = css(hx(pick(['#7d655b', '#836659', '#79675d'])), .4); g.fill(lb.P);
+    }
+    if (hi && rnd() < Math.pow(side, 1.3) * 1.1 + hgt * .3){
+      const d2 = lb.r * R(.04, .1) * lerp(.4, 1.6, hgt) * side;
+      clipMinus(g, lb.P, ld[0] * d2, ld[1] * d2);
+      g.fillStyle = css(hi, .95); g.fill(lb.P);
+    }
+    g.restore();
+    g.restore();
+  }
+}
+function clipLitPath(c, v){ c.beginPath(); const e = v ? -10 : H; c.moveTo(-10, e); for (let x = -10; x <= W + 10; x += 20) c.lineTo(x, shadowY(x) + 40); c.lineTo(W + 10, e); c.closePath(); }
+let cloudSeed = 0;
+T(() => { cloudSeed = seed; pass(g => drawCloud(g), { mask: 'heavy' }); });
+// 同じ線をもう一度強く重ねて紙の目を埋める
+T(() => { const after = seed; seed = cloudSeed; pass(g => drawCloud(g), { mask: 'full', alpha: .55 }); seed = after; });
+// 受光部の縁を暁のサンギーヌでなぞる
+T(() => pass(g => {
+  for (const lb of LOBES){ if (!isLit(lb) || lb.u < -.2 || rnd() < .4) continue;
+    const a0 = Math.atan2(lb.ld[1], lb.ld[0]) + Math.PI + R(-.7, .3);
+    pencilPath(g, arcPts(lb.x, lb.y, lb.r * R(.86, .95), a0, R(.5, 1.1), 8), hx('#b4573a'), R(.3, .6), R(1.3, 2.4)); }
+}, { mask: 'med' }));
+// 雲の陰側：色鉛筆の輪郭とハッチング
+T(() => pass(g => {
+  for (const lb of LOBES){
+    if (lb.r < W * .012 || rnd() < .15) continue;
+    const lit = isLit(lb);
+    const col = lit ? hx('#4e2a27') : hx('#262221');
+    const a0 = Math.atan2(-lb.ld[1], -lb.ld[0]) + R(-.9, .9);
+    pencilPath(g, arcPts(lb.x, lb.y, lb.r * R(.9, .98), a0, R(.6, 1.6) * (rnd() < .5 ? 1 : -1), 10), col, R(.3, .6), R(1.2, 2.4));
+    if (rnd() < .5){
+      g.save(); g.clip(lb.P);
+      const sx = lb.x + lb.ld[0] * lb.r * .45, sy = lb.y + lb.ld[1] * lb.r * .45;
+      hatch(g, sx - lb.r * .6, sy - lb.r * .6, sx + lb.r * .6, sy + lb.r * .6, R(-1, -.6), R(5, 9), col, R(.2, .38), R(1, 1.6), [10, 40]);
+      g.restore();
+    }
+  }
+}, { mask: 'med' }));
+T(() => pass(g => {   // 地球の影の側の木炭
+  g.save(); g.clip(CORE);
+  for (let i = 0; i < 240; i++){ const x = R(.58, .98) * W, y = R(shadowY(x) + 10, HY);
+    pastel(g, pathPts(x, y, R(-.3, .3) + Math.PI * (rnd() < .5 ? 0 : 1), R(40, 160), R(-.02, .02), 5), R(6, 22), hx(pick(['#1f1c1b', '#2a2624', '#2f2c2a'])), R(.2, .45)); }
+  g.restore();
+}, { mask: 'light', op: 'multiply' }));
+// 練り消しで軽く拭った受光面
+T(() => pass(g => {
+  for (let i = 0; i < 30; i++){ const lb = pick(LOBES); if (!isLit(lb) || lb.u < 0) continue;
+    const a = Math.atan2(-lb.ld[1], -lb.ld[0]) + Math.PI / 2;
+    pastel(g, pathPts(lb.x - lb.ld[0] * lb.r * .6, lb.y - lb.ld[1] * lb.r * .6, a + R(-.3, .3), lb.r * R(.4, .9), R(-.02, .02), 5), R(5, 12), hx('#f7ead2'), .45); }
+}, { mask: 'light' }));
+// 雲の裾を地平のもやに溶かす
+T(() => pass(g => {
+  for (let i = 0; i < 520; i++){ const x = R(.45, 1.02) * W, d = Math.pow(rnd(), 1.3), y = HY - d * 170, len = R(80, 280), t = skyT(x + len / 2, y) - .05;
+    pastel(g, pathPts(x - len / 2, y, R(-.02, .02), len, 0, 6), R(8, 22), stick(t, .45), (1 - d) * .5); }
+}, { mask: 'heavy' }));
+T(() => smear(g => fingers(g, 90, .4 * W, HY - 170, W + 40, HY + 2, 0, [100, 300], [8, 20]), 4, -1, 4, .25, 4));
+
+// ---------------- 5. 鳥：二つの群れが出会い、並んで飛ぶ
+function qbez(p0, p1, p2, t){ const u = 1 - t; return [u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0], u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1]]; }
+function bird(g, x, y, s, tilt, flap, col, al, lit){
+  const c = Math.cos(tilt), sn = Math.sin(tilt), P = (px, py) => [x + px * c - py * sn, y + px * sn + py * c];
+  const asym = R(.85, 1.15);
+  const L0 = P(-s * asym, -s * .42 * flap - s * .02), L1 = P(-s * .42 * asym, -s * .3 * flap - s * .2), B = P(0, 0);
+  const R1 = P(s * .45, -s * .3 * flap - s * .2), R0 = P(s * 1.02, -s * .44 * flap - s * .03);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  for (let k = 0; k < 2; k++){
+    g.strokeStyle = css(jit(col, 5), al * (k ? .55 : .95)); g.lineWidth = Math.max(1.3, s * .1) * (k ? .7 : 1);
+    g.beginPath(); g.moveTo(L0[0] + R(-.7, .7), L0[1] + R(-.7, .7)); g.quadraticCurveTo(L1[0], L1[1] + R(-1, 1), B[0], B[1]);
+    g.quadraticCurveTo(R1[0], R1[1] + R(-1, 1), R0[0] + R(-.7, .7), R0[1] + R(-.7, .7)); g.stroke();
+  }
+  // 付け根は太く（筆圧）
+  g.lineWidth = Math.max(1.8, s * .17); g.strokeStyle = css(col, al);
+  const m1 = qbez(L1, L1, B, .5), m2 = qbez(B, R1, R1, .5);
+  g.beginPath(); g.moveTo(m1[0], m1[1]); g.quadraticCurveTo(B[0], B[1] - s * .02, m2[0], m2[1]); g.stroke();
+  g.fillStyle = css(col, al); g.beginPath(); g.ellipse(B[0], B[1] + s * .04, s * .14, s * .075, tilt + R(-.2, .2), 0, 6.283); g.fill();
+  if (lit){   // 腹に受けた朝の色
+    g.strokeStyle = css(lit, al * .85); g.lineWidth = Math.max(1.1, s * .07);
+    const a = P(-s * .38, -s * .26 * flap - s * .12), b = P(s * .4, -s * .26 * flap - s * .12);
+    g.beginPath(); g.moveTo(a[0], a[1] + s * .1); g.quadraticCurveTo(B[0], B[1] + s * .13, b[0], b[1] + s * .1); g.stroke();
+  }
+}
+const BIRDS = [];
+const M = [.405 * W, .30 * H];
+{ // 左からの群れ（夜の側から来た、濃い鳥）
+  const p0 = [-.03 * W, .52 * H], p1 = [.17 * W, .36 * H];
+  for (let i = 0; i < 21; i++){ const t = i / 20 * .9 + R(-.02, .02), p = qbez(p0, p1, M, t), wv = Math.sin(t * 9 + 1) * 22 + R(-14, 14);
+    BIRDS.push({ x: p[0] + R(-8, 8), y: p[1] + wv, s: lerp(27, 15, t) * R(.85, 1.15), tilt: R(-.15, .12) - .12, col: hx('#2a2422'), lit: null }); }
+}
+{ // 雲の側から来た群れ（光を知っている、腹の明るい鳥）
+  const p0 = [.60 * W, .40 * H], p1 = [.52 * W, .27 * H];
+  for (let i = 0; i < 11; i++){ const t = i / 10 * .88 + R(-.02, .02), p = qbez(p0, p1, M, t), wv = Math.sin(t * 7) * 14 + R(-10, 10);
+    BIRDS.push({ x: p[0] + R(-6, 6), y: p[1] + wv, s: lerp(17, 14, t) * R(.85, 1.15), tilt: R(-.1, .15) + .1, col: hx('#3b2a27'), lit: hx('#e99a5c') }); }
+}
+{ // 出会いの場所：まだ少し入り乱れている
+  for (let i = 0; i < 9; i++){ const a = R(0, 6.283), r = R(10, 75);
+    BIRDS.push({ x: M[0] + Math.cos(a) * r * 1.4, y: M[1] + Math.sin(a) * r * .7, s: R(12, 16), tilt: R(-.3, .3), col: hx(i % 2 ? '#2a2422' : '#3b2a27'), lit: i % 2 ? (rnd() < .5 ? hx('#c97b4f') : null) : hx('#e99a5c') }); }
+}
+{ // ふたつずつ並んで、画面の外へ
+  const p0 = [M[0] - 20, M[1] - 30], p1 = [.30 * W, .2 * H], p2 = [.10 * W, -.02 * H];
+  for (let i = 0; i < 13; i++){ const t = i / 12 * .95 + R(-.015, .015), p = qbez(p0, p1, p2, t);
+    const tx = -(.30 * W - p0[0]) , ty = (.2 * H - p0[1]); const L = Math.hypot(tx, ty); const nx = ty / L, ny = -tx / L;
+    const gap = lerp(16, 10, t), s = lerp(14, 9, t);
+    BIRDS.push({ x: p[0] + nx * gap + R(-3, 3), y: p[1] + ny * gap * .4 + Math.sin(t * 11) * 8, s: s * R(.9, 1.1), tilt: R(-.1, .1) - .2, col: hx('#2c2523'), lit: hx(t < .5 ? '#c97b4f' : '#dc8e58') });
+    BIRDS.push({ x: p[0] - nx * gap + R(-3, 3), y: p[1] - ny * gap * .4 + Math.sin(t * 11) * 8, s: s * R(.9, 1.1), tilt: R(-.1, .1) - .2, col: hx('#3b2a27'), lit: hx(t < .5 ? '#e99a5c' : '#f0b47a') });
+  }
+}
+T(() => pass(g => { for (const b of BIRDS) bird(g, b.x, b.y, b.s * 1.25, b.tilt, R(-.6, 1), b.col, R(.8, .95), b.lit); }, { mask: 'heavy' }));
+T(() => pass(g => { for (const b of BIRDS) if (rnd() < .6) bird(g, b.x + R(-1, 1), b.y + R(-1, 1), b.s * 1.25, b.tilt, R(-.2, .8), b.col, .45, null); }, { mask: 'light' }));
+
+// ---------------- 6. 遠景：低い丘と木立
+T(() => pass(g => {
+  // 遠い丘（空気の色に沈む）
+  g.beginPath(); g.moveTo(-10, HY + 2);
+  for (let x = -10; x <= .62 * W; x += 8){ const u = x / (.62 * W); g.lineTo(x, HY - (52 * Math.pow(Math.sin(Math.PI * clamp(u * 1.1 + .05, 0, 1)), 1.3) + 18 * vn1(x / 90) + 8) * (1 - u * .6)); }
+  g.lineTo(.62 * W, HY + 2); g.closePath();
+  g.fillStyle = css(hx('#7d5148'), .75); g.fill();
+  g.save(); g.clip();
+  for (let i = 0; i < 160; i++){ const x = R(0, .62 * W), y = R(HY - 70, HY);
+    pastel(g, pathPts(x, y, R(-.1, .1), R(40, 120), 0, 4), R(6, 14), hx(pick(['#8a5a4c', '#76524a', '#946a55', '#6b5149'])), .55); }
+  g.restore();
+  // 手前の木立（シルエット）
+  g.fillStyle = css(hx('#3a2f2c'));
+  g.beginPath(); g.moveTo(-10, HY + 4);
+  for (let x = -10; x <= W + 10; x += 5){
+    const dense = x < .66 * W ? 1 : .25, h = (vn1(x / 23) * 16 + vn1(x / 7) * 6 + Math.max(0, vn1(x / 60 + 3) - .45) * 46) * dense + 3;
+    g.lineTo(x, HY - h);
+  }
+  g.lineTo(W + 10, HY + 4); g.closePath(); g.fill();
+}, { mask: 'heavy' }));
+T(() => pass(g => {
+  for (let i = 0; i < 700; i++){ const x = R(0, W), top = HY - (x < .66 * W ? R(2, 30) : R(1, 8));
+    pencil(g, x, HY + 2, x + R(-3, 3), top, hx(pick(['#2a2220', '#3d302b', '#4b3a33'])), R(.3, .7), R(1, 2)); }
+  for (let x = 0; x < W; x += R(20, 90)) pencil(g, x, HY - R(0, 3), x + R(40, 160), HY - R(0, 3), hx('#e3a370'), R(.15, .4), 1.2);
+}, { mask: 'med' }));
+
+// ---------------- 7. 水を張った田（空を映す）
+let SKYIMG = null;
+T(() => {
+  SKYIMG = ctx.getImageData(0, 0, W, HY).data;
+  smg.clearRect(0, 0, W, H); smg.drawImage(cv, 0, 0);
+  ctx.save(); ctx.beginPath(); ctx.rect(0, HY, W, H - HY); ctx.clip();
+  ctx.translate(0, 2 * HY); ctx.scale(1, -1); ctx.filter = 'blur(5px)'; ctx.globalAlpha = .9;
+  ctx.drawImage(SM, 0, HY - (H - HY), W, H - HY, 0, HY - (H - HY), W, H - HY);
+  ctx.restore();
+  ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = 'rgba(120,112,98,.55)'; ctx.fillRect(0, HY, W, H - HY); ctx.restore();
+});
+const samp = (x, y) => { x = clamp(x | 0, 0, W - 1); y = clamp(y | 0, 0, HY - 1); const i = (y * W + x) * 4; return [SKYIMG[i], SKYIMG[i + 1], SKYIMG[i + 2]]; };
+T(() => pass(g => {
+  let y = HY + 1;
+  while (y < H){
+    const d = (y - HY) / (H - HY), step = lerp(2.2, 12, Math.pow(d, .8));
+    let x = -R(0, 90);
+    while (x < W){
+      const len = lerp(25, 210, d) * R(.4, 1.6), ry = HY - (y - HY) - R(0, 5) * d, wob = Math.sin(y * .09 + x * .004) * lerp(2, 24, d);
+      let c = samp(x + len / 2 + wob, ry); const dk = lerp(.9, .55, Math.pow(d, .7));
+      c = [c[0] * dk * .96, c[1] * dk, c[2] * dk * .94];
+      if (rnd() < .2) c = mixc(c, [36, 38, 33], .55);
+      const w = step * R(.8, 1.5);
+      pastel(g, [[x, y + R(-1, 1)], [x + len * .5, y + R(-1.5, 1.5)], [x + len, y + R(-1, 1)]], w, c, R(.6, .95), { strands: Math.max(2, Math.round(w / 2)), taper: .4 });
+      x += len * R(.55, 1.05);
+    }
+    y += step * R(.7, 1.1);
+  }
+}, { mask: 'heavy' }));
+T(() => pass(g => {   // 水面のきらめきは色鉛筆の短い線で
+  for (let i = 0; i < 900; i++){ const x = R(0, W), d = Math.pow(rnd(), 2.2), y = HY + 3 + d * 260;
+    const c = samp(x, HY - (y - HY)); const lum = (c[0] + c[1] + c[2]) / 3;
+    if (lum < 150 && rnd() < .8) continue;
+    const l = R(8, 60) * (1 + d * 2); pencil(g, x, y, x + l, y + R(-1, 1), mixc(c, [250, 236, 205], .45), R(.3, .7), R(1, 2)); }
+  for (let i = 0; i < 700; i++){ const x = R(0, W), y = HY + Math.pow(rnd(), 1.5) * (H - HY), l = R(20, 140);
+    pencil(g, x, y, x + l, y + R(-1.5, 1.5), hx(pick(['#262622', '#2e2b26', '#33302a'])), R(.2, .45), R(1, 2.2)); }
+}, { mask: 'med' }));
+
+// 畦道
+const RIDGES = [
+  { x0: -30, y0: HY + 44, x1: .60 * W, y1: HY + 8, h0: 8, h1: 2.5 },
+  { x0: -30, y0: HY + 150, x1: .99 * W, y1: HY + 46, h0: 15, h1: 4 },
+  { x0: .30 * W, y0: H * .90, x1: W + 30, y1: HY + 118, h0: 24, h1: 9 },
+];
+const ridgeTop = (r, x) => { const u = (x - r.x0) / (r.x1 - r.x0); return lerp(r.y0, r.y1, u) + (vn1(x / 80 + r.y0) - .5) * lerp(r.h0, r.h1, u) * .6; };
+T(() => pass(g => {
+  for (const r of RIDGES){
+    const n = 120;
+    // 水面に落ちる影（映り込み）
+    for (let i = 0; i < n; i++){ const x = lerp(r.x0, r.x1, i / n), h = lerp(r.h0, r.h1, i / n), y = ridgeTop(r, x) + h;
+      pastel(g, [[x, y + h * .4], [x + (r.x1 - r.x0) / n * 1.5, y + h * .5]], h * R(.6, 1.2), hx('#24221f'), .45, { strands: 3 }); }
+    g.beginPath();
+    for (let i = 0; i <= n; i++){ const x = lerp(r.x0, r.x1, i / n); i ? g.lineTo(x, ridgeTop(r, x)) : g.moveTo(x, ridgeTop(r, x)); }
+    for (let i = n; i >= 0; i--){ const x = lerp(r.x0, r.x1, i / n); g.lineTo(x, ridgeTop(r, x) + lerp(r.h0, r.h1, i / n) * R(.8, 1.1)); }
+    g.closePath(); g.fillStyle = css(hx('#2d2824')); g.fill();
+  }
+}, { mask: 'heavy' }));
+T(() => pass(g => {
+  for (const r of RIDGES){
+    for (let i = 0; i < 520; i++){ const u = rnd(), x = lerp(r.x0, r.x1, u), y = ridgeTop(r, x), h = lerp(r.h0, r.h1, u);
+      pencil(g, x, y + h * .3, x + R(-h * .5, h * .5), y - h * R(.3, 1.6), hx(pick(['#2a2a22', '#36352a', '#403829', '#1f1e1b'])), R(.4, .8), R(1, 1.8)); }
+    for (let x = r.x0; x < r.x1; x += R(15, 80)){ const l = R(20, 90); if (rnd() < .5)
+      pencil(g, x, ridgeTop(r, x) - .5, x + l, ridgeTop(r, x + l) - .5, hx(pick(['#b9714d', '#c98a5c', '#8d5a46'])), R(.3, .65), R(1, 1.6)); }
+  }
+}, { mask: 'med' }));
+
+// ---------------- 8. 手前の土手
+const bankY = x => { const u = x / W; return lerp(1258, 1150, smooth(.25, 1, u)) - 18 * Math.sin(u * 7) + (vn1(x / 40) - .5) * 16; };
+T(() => pass(g => {
+  g.beginPath(); g.moveTo(-10, H + 10); for (let x = -10; x <= W + 10; x += 6) g.lineTo(x, bankY(x)); g.lineTo(W + 10, H + 10); g.closePath();
+  g.fillStyle = css(hx('#221f1b')); g.fill();
+  g.save(); g.clip();
+  for (let i = 0; i < 2600; i++){ const x = R(-20, W), y = R(bankY(x) - 5, H + 10);
+    pastel(g, pathPts(x, y, -Math.PI / 2 + R(-.6, .6), R(14, 60), R(-.04, .04), 4), R(3, 9), hx(pick(['#2b2c24', '#33322a', '#3c3628', '#29231e', '#3a3a2e', '#45402f'])), R(.4, .8), { strands: 3 }); }
+  g.restore();
+}, { mask: 'heavy' }));
+T(() => pass(g => {   // 土手の縁の草
+  for (let i = 0; i < 1500; i++){ const x = R(-10, W + 10), y = bankY(x) + R(0, 22), h = R(14, 70) * (rnd() < .1 ? 2 : 1);
+    const pts = pathPts(x, y, -Math.PI / 2 + R(-.45, .45), h, R(-.04, .04), 5);
+    pencilPath(g, pts, hx(pick(['#1b1a17', '#262620', '#2f2c24'])), R(.5, .9), R(1.2, 2.6));
+    if (rnd() < .22) pencilPath(g, pts.slice(1).map(p => [p[0] + .9, p[1]]), hx(pick(['#d98a52', '#c7774a', '#e7a46c'])), R(.3, .6), R(.8, 1.3));
+  }
+}, { mask: 'med' }));
+
+// ---------------- 9. 左手前のすすき（雲の方へ穂を傾ける）
+function blade(g, x, y, a, len, curv, w0, col, rim){
+  const n = Math.max(8, Math.round(len / 16)), pts = []; let ang = a;
+  for (let i = 0; i <= n; i++){ pts.push([x, y]); ang += curv * (.3 + i / n) + R(-.012, .012); x += Math.cos(ang) * len / n; y += Math.sin(ang) * len / n; }
+  const Lp = [], Rp = [];
+  for (let i = 0; i <= n; i++){ const p = pts[i], q = pts[Math.min(i + 1, n)], pp = pts[Math.max(i - 1, 0)], dx = q[0] - pp[0], dy = q[1] - pp[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L, ww = w0 * (1 - Math.pow(i / n, 1.4) * .93);
+    Lp.push([p[0] + nx * ww / 2, p[1] + ny * ww / 2]); Rp.push([p[0] - nx * ww / 2, p[1] - ny * ww / 2]); }
+  g.fillStyle = css(col); g.beginPath(); Lp.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]));
+  for (let i = Rp.length - 1; i >= 0; i--) g.lineTo(Rp[i][0], Rp[i][1]); g.closePath(); g.fill();
+  if (rim) pencilPath(g, Lp.slice(Math.floor(n * R(.05, .35)), Math.floor(n * R(.6, .95))), rim, R(.35, .75), R(1, 1.9));
+  return pts;
+}
+const STEMS = [];
+for (let i = 0; i < 11; i++){
+  const bx = R(.01, .2) * W, len = R(560, 900), a = -Math.PI / 2 + R(.05, .42), curv = R(.004, .011);
+  STEMS.push({ bx, by: H + 40, len, a, curv });
+}
+T(() => pass(g => {
+  for (let i = 0; i < 170; i++){
+    const bx = R(-.03, .24) * W, by = H + R(10, 60), a = -Math.PI / 2 + R(-.55, .6), len = R(220, 760);
+    const curv = (a > -Math.PI / 2 ? 1 : -1) * R(.006, .03);
+    blade(g, bx, by, a, len, curv, R(5, 13), hx(pick(['#1a1815', '#211e19', '#26231c', '#1d1c17', '#2b261e'])), rnd() < .45 ? hx(pick(['#d4844e', '#e09a62', '#b86d45', '#e8b07a'])) : null);
+  }
+  for (const s of STEMS){
+    s.pts = []; let x = s.bx, y = s.by, a = s.a; const n = 40;
+    for (let i = 0; i <= n; i++){ s.pts.push([x, y]); a += s.curv * (i / n) * 2.2 + R(-.008, .008); x += Math.cos(a) * s.len / n; y += Math.sin(a) * s.len / n; }
+    pencilPath(g, s.pts, hx('#1e1b17'), .95, 4.2);
+    pencilPath(g, s.pts.slice(10, 40).map(p => [p[0] + 1.6, p[1] - .5]), hx('#c98756'), .45, 1.2);
+  }
+}, { mask: 'heavy' }));
+T(() => pass(g => {   // 穂：逆光で縁だけ色を拾う、ふわふわした繊維
+  for (const s of STEMS){
+    const n = s.pts.length - 1;
+    for (let k = 0; k < 150; k++){
+      const t = R(.62, 1), i = Math.min(n - 1, Math.floor(t * n)), p = s.pts[i], q = s.pts[i + 1];
+      const ang = Math.atan2(q[1] - p[1], q[0] - p[0]), side = rnd() < .5 ? -1 : 1;
+      const fa = ang + side * R(.2, .75) + .25, fl = R(18, 62) * (1 - (t - .62) * 1.1);
+      const pts = pathPts(p[0], p[1], fa, fl, R(.01, .05), 4);
+      const c = rnd() < .22 ? hx(pick(['#3b2e26', '#4a3a2e'])) : hx(pick(['#e9b77a', '#f2d3a0', '#d99358', '#caa06a', '#f6e3c0', '#e3a066']));
+      pencilPath(g, pts, c, R(.45, .85), R(.9, 1.7));
+    }
+  }
+}, { mask: 'med' }));
+T(() => pass(g => {
+  for (const s of STEMS){ const n = s.pts.length - 1;
+    for (let k = 0; k < 18; k++){ const i = Math.floor(R(.65, .98) * n), p = s.pts[i];
+      g.fillStyle = css(hx(pick(['#f0c890', '#e8ab72', '#f5e0bb'])), R(.25, .5)); g.beginPath(); g.ellipse(p[0] + R(-14, 14), p[1] + R(-10, 10), R(6, 16), R(3, 8), R(0, 3), 0, 6.283); g.fill(); } }
+}, { mask: 'light' }));
+
+// ---------------- 10. 月見草（右下でひとつ、静かに開く）
+function petalPts(r){
+  const pts = [], n = 26;
+  for (let i = 0; i <= n; i++){ const t = i / n, x = r * (.06 + .9 * t), hw = r * .5 * Math.pow(Math.sin(Math.min(t / .72, 1) * Math.PI / 2), .9) * (t > .72 ? 1 - (t - .72) * .55 : 1);
+    pts.push([x, -hw]); }
+  const right = pts.map(([x, y]) => [x, -y]).reverse();
+  const tip = [[r * 1.0, -r * .3], [r * .99, -r * .14], [r * .86, -r * .01], [r * .86, r * .01], [r * .99, r * .14], [r * 1.0, r * .3]];
+  const ph = R(0, 99); return pts.concat(tip).concat(right).map(([x, y], i) => { const w = (vn1(ph + i * .7) - .5) * r * .07; return [x + w * .4 + R(-r * .01, r * .01), y + w]; });
+}
+function flowerPetals(cx, cy, r, rot, sqx, sqy, angles){
+  const out = [];
+  for (const a of angles){
+    const ca = Math.cos(a + rot), sa = Math.sin(a + rot);
+    const pts = petalPts(r * R(.92, 1.06)).map(([x, y]) => { const X = x * ca - y * sa, Y = x * sa + y * ca; return [cx + X * sqx, cy + Y * sqy]; });
+    out.push({ P: smoothPath(pts), a: a + rot });
+  }
+  return out;
+}
+const FL = [
+  { x: .785 * W, y: 1128, r: 96, rot: .25, sqx: 1, sqy: .78, angles: [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2], open: 1 },
+  { x: .858 * W, y: 1196, r: 50, rot: 0, sqx: .9, sqy: .55, angles: [-Math.PI / 2 - .75, -Math.PI / 2 + .75, -Math.PI / 2 - .05], open: .5 },
+];
+T(() => pass(g => {
+  // 茎と葉
+  const stem = (x0, y0, x1, y1) => { const pts = []; for (let i = 0; i <= 20; i++){ const t = i / 20; pts.push([lerp(x0, x1, t) + Math.sin(t * 3) * 10, lerp(y0, y1, t)]); } pencilPath(g, pts, hx('#4a2f26'), .95, 4); pencilPath(g, pts, hx('#2a2420'), .6, 2); return pts; };
+  const leaf = (x, y, a, len, w) => {
+    const L = [], Rr = [];
+    const kl = R(.75, 1.15), kr = R(.75, 1.15), dr = R(8, 26), ph = R(0, 9);
+    for (let i = 0; i <= 18; i++){ const t = i / 18, px = x + Math.cos(a) * len * t + Math.sin(t * 3 + ph) * 6, py = y + Math.sin(a) * len * t + t * t * dr, hw = w * Math.pow(Math.sin(Math.PI * Math.pow(t, .8)), .8) * (1 + (vn1(ph * 9 + t * 6) - .5) * .25);
+      L.push([px - Math.sin(a) * hw * kl, py + Math.cos(a) * hw * kl]); Rr.push([px + Math.sin(a) * hw * kr, py - Math.cos(a) * hw * kr]); }
+    const P = smoothPath(L.concat(Rr.reverse()));
+    g.fillStyle = css(hx(pick(['#272b22', '#2d3226', '#30302a']))); g.fill(P);
+    g.save(); g.clip(P);
+    for (let k = 0; k < 14; k++) pastel(g, pathPts(x + R(0, len * .7) * Math.cos(a), y + R(0, len * .7) * Math.sin(a) + R(-w, w), a + R(-.2, .2), R(20, len * .4), 0, 4), R(3, 8), hx(pick(['#3b4231', '#454a36', '#1f221b', '#4a4532'])), .6);
+    hatch(g, x - len, y - len, x + len, y + len, a + 1.1, 5, hx('#1c1d18'), .3, 1, [8, 26], .7);
+    g.restore();
+    pencilPath(g, L.slice(2, 16).map((p, i) => [(p[0] + Rr[Rr.length - 1 - i - 2][0]) / 2, (p[1] + Rr[Rr.length - 1 - i - 2][1]) / 2]), hx('#a4996a'), .45, 1.1);
+    pencilPath(g, Rr.slice(3, 15), hx('#c8935e'), .35, 1);
+  };
+  stem(.80 * W, H + 20, FL[0].x + 4, FL[0].y + 20);
+  stem(.865 * W, H + 20, FL[1].x, FL[1].y + 18);
+  stem(.752 * W, H + 20, .748 * W, 1080);
+  stem(.835 * W, H + 20, .83 * W, 1062);
+  stem(.905 * W, H + 20, .9 * W, 1128);
+  const leaves = [[.80 * W, 1350, -2.6, 120, 16], [.80 * W, 1300, -.4, 130, 15], [.80 * W, 1240, -2.8, 100, 13], [.795 * W, 1200, -.25, 90, 11],
+    [.865 * W, 1330, -.5, 110, 14], [.865 * W, 1270, -2.7, 95, 12], [.752 * W, 1250, -2.5, 110, 13], [.752 * W, 1180, -.35, 80, 10],
+    [.835 * W, 1220, -.6, 90, 11], [.905 * W, 1270, -2.4, 100, 13], [.905 * W, 1210, -.3, 85, 11], [.835 * W, 1150, -2.6, 70, 9]];
+  for (const l of leaves) leaf(...l);
+  // つぼみ（少し赤みを帯びた萼に包まれて）
+  const bud = (x, y, a, len, w) => {
+    const P = new Path2D(); P.ellipse(x + Math.cos(a) * len / 2, y + Math.sin(a) * len / 2, len / 2, w, a, 0, 6.283);
+    g.fillStyle = css(hx('#7d4a37')); g.fill(P);
+    g.save(); g.clip(P); g.fillStyle = css(hx('#e6d27a')); g.beginPath(); g.ellipse(x + Math.cos(a) * len * .85, y + Math.sin(a) * len * .85, len * .22, w * .7, a, 0, 6.283); g.fill();
+    pastel(g, [[x, y], [x + Math.cos(a) * len, y + Math.sin(a) * len]], w * .6, hx('#a5603f'), .6); g.restore();
+    pencilPath(g, [[x, y], [x + Math.cos(a - .05) * len * .5, y + Math.sin(a - .05) * len * .5], [x + Math.cos(a) * len, y + Math.sin(a) * len]], hx('#3a2620'), .6, 1.4);
+  };
+  bud(.748 * W, 1080, -1.75, 62, 10); bud(.83 * W, 1062, -1.45, 72, 11); bud(.9 * W, 1128, -1.25, 48, 8);
+}, { mask: 'heavy' }));
+// 花びら：クレヨンの下塗り（紙の目で白く飛ぶ）→パステル→色鉛筆
+const PETALS = FL.map(f => flowerPetals(f.x, f.y, f.r, f.rot, f.sqx, f.sqy, f.angles));
+function paintPetals(g, layer){
+  FL.forEach((f, fi) => {
+    for (const pt of PETALS[fi]){
+      g.save(); g.clip(pt.P);
+      if (layer === 0){
+        g.fillStyle = css(hx(fi ? '#e7d07a' : '#ecd986')); g.fill(pt.P);
+      }
+      // 花芯から外へ向かうクレヨンの筋
+      for (let k = 0; k < (layer ? 26 : 16); k++){
+        const inner = rnd() < .35, a = pt.a + R(-.5, .5), r0 = f.r * R(.05, .25), r1 = f.r * (inner ? R(.3, .55) : R(.6, 1.05));
+        const c = inner ? hx(pick(['#e2b443', '#d9a83a', '#e8c25a'])) : layer ? hx(pick(['#f3e6a6', '#f6eec4', '#efdc8c', '#f1d98a', '#f7e9b2'])) : hx(pick(['#e4c96a', '#ead27a', '#dcc062']));
+        pastel(g, [[f.x + Math.cos(a) * r0 * f.sqx, f.y + Math.sin(a) * r0 * f.sqy], [f.x + Math.cos(a) * (r0 + r1) / 2 * f.sqx, f.y + Math.sin(a) * (r0 + r1) / 2 * f.sqy], [f.x + Math.cos(a) * r1 * f.sqx, f.y + Math.sin(a) * r1 * f.sqy]], R(5, 12), c, R(.5, .9), { lw: [1.4, 3.6] });
+      }
+      g.restore();
+    }
+  });
+}
+T(() => pass(g => paintPetals(g, 0), { mask: 'full' }));
+
+T(() => pass(g => paintPetals(g, 1), { mask: 'light' }));
+T(() => pass(g => {   // 花芯へ向かって濃くなる黄（クレヨンを押し付けて）
+  FL.forEach((f, fi) => { for (const pt of PETALS[fi]){ g.save(); g.clip(pt.P);
+    for (let k = 0; k < 22; k++){ const a = pt.a + R(-.45, .45), r1 = f.r * R(.18, .5);
+      pastel(g, [[f.x, f.y], [f.x + Math.cos(a) * r1 * .5 * f.sqx, f.y + Math.sin(a) * r1 * .5 * f.sqy], [f.x + Math.cos(a) * r1 * f.sqx, f.y + Math.sin(a) * r1 * f.sqy]], R(4, 9), hx(pick(['#d9a438', '#e2b54a', '#cf9a33', '#e6c25c'])), R(.5, .85), { lw: [1.2, 3] }); }
+    g.restore(); } });
+}, { mask: 'med' }));
+T(() => pass(g => {   // セル塗りの影と、空の色を映した縁、色鉛筆の葉脈
+  FL.forEach((f, fi) => {
+    PETALS[fi].forEach((pt, k) => {
+      g.save(); g.clip(pt.P);
+      const sh = new Path2D(); const a = pt.a + R(-.1, .04);
+      sh.moveTo(f.x, f.y); for (let i = 0; i <= 12; i++){ const aa = a + i / 12 * 1.9; sh.lineTo(f.x + Math.cos(aa) * f.r * 1.4, f.y + Math.sin(aa) * f.r * 1.4); } sh.closePath();
+      if (k % 2 === 0 || fi){ g.fillStyle = css(hx('#9c8240'), .78); g.fill(sh); g.save(); g.clip(sh); hatch(g, f.x - f.r, f.y - f.r, f.x + f.r, f.y + f.r, pt.a + 1, 4, hx('#7d6a2e'), .35, 1, [10, 30]); g.restore(); }
+      clipMinus(g, pt.P, -Math.cos(pt.a) * 5, -Math.sin(pt.a) * 5 + 2);
+      g.fillStyle = css(hx('#f0b97a'), .55); g.fill(pt.P);
+      g.restore();
+      for (let v = 0; v < 7; v++){ const aa = pt.a + (v - 3) * .14 + R(-.04, .04), pts = [];
+        for (let i = 0; i <= 8; i++){ const rr = f.r * (.12 + .7 * i / 8); pts.push([f.x + Math.cos(aa + Math.sin(i * .4) * .05) * rr * f.sqx, f.y + Math.sin(aa) * rr * f.sqy]); }
+        pencilPath(g, pts, hx('#b79a45'), R(.2, .4), .9); }
+      const outline = []; // 輪郭は途切れ途切れに
+      g.save(); g.lineWidth = 1.7; g.strokeStyle = css(hx('#86702f'), .55); g.stroke(pt.P);
+      g.lineWidth = 1.1; g.strokeStyle = css(hx('#5f4f22'), .5); g.setLineDash([R(20, 60), R(6, 20), R(10, 40), R(4, 12)]); g.translate(R(-.8, .8), R(-.8, .8)); g.stroke(pt.P); g.restore();
+    });
+    // 花芯
+    g.fillStyle = css(hx('#c9a43e')); g.beginPath(); g.ellipse(f.x, f.y, f.r * .13 * f.sqx, f.r * .13 * f.sqy, 0, 0, 6.283); g.fill();
+    g.fillStyle = css(hx('#9fa05a'), .7); g.beginPath(); g.ellipse(f.x - 2, f.y + 1, f.r * .06, f.r * .05, 0, 0, 6.283); g.fill();
+    if (!fi){
+      for (let s = 0; s < 8; s++){ const a = s / 8 * 6.283 + R(-.2, .2), l = f.r * R(.22, .34), x2 = f.x + Math.cos(a) * l, y2 = f.y + Math.sin(a) * l * f.sqy - 6;
+        pencil(g, f.x, f.y, x2, y2, hx('#8a7a3a'), .7, 1.4); g.fillStyle = css(hx('#d9b44c')); g.beginPath(); g.ellipse(x2, y2, 4, 2.2, a, 0, 6.283); g.fill(); }
+      for (let s = 0; s < 4; s++){ const a = s / 4 * 6.283 + .5, x2 = f.x + Math.cos(a) * f.r * .2, y2 = f.y - 18 + Math.sin(a) * f.r * .12;
+        pencil(g, f.x, f.y - 14, x2, y2, hx('#e9e0a8'), .8, 2.2); }
+    }
+  });
+}, { mask: 'med' }));
+
+// ---------------- 11. 仕上げ
+// 四隅：木炭を寝かせた斜めのハッチングで画面を締める
+T(() => pass(g => {
+  for (let i = 0; i < 2600; i++){
+    const cx = rnd() < .5 ? 0 : W, cy = rnd() < .5 ? 0 : H, d = Math.pow(rnd(), 1.6) * .42;
+    const a = R(0, Math.PI / 2), x = Math.abs(cx - Math.cos(a) * d * W), y = Math.abs(cy - Math.sin(a) * d * H * 1.4);
+    const l = R(40, 150) * (1 - d);
+    if (cy === H && cx === 0 && y > HY) continue;   // すすきの暗さは足りている
+    pencil(g, x, y, x + l * .75, y - l * .66, hx(pick(['#1e1b18', '#2a2420', '#352a24'])), R(.08, .25) * (1 - d * 2), R(1.5, 3.5));
+  }
+}, { mask: 'med', op: 'multiply' }));
+// 練り消しで拭った跡（暗い空にだけ、そっと）
+T(() => pass(g => {
+  for (let i = 0; i < 14; i++){ const x = R(.02, .5) * W, y = R(.04, .3) * H; if (skyT(x, y) > .35) continue;
+    pastel(g, pathPts(x, y, R(-.25, .1), R(60, 200), R(-.01, .01), 6), R(6, 14), hx('#b49a78'), R(.18, .32), { taper: .5 }); }
+}, { mask: 'heavy' }));
+// パステルの粉、木炭の粉
+T(() => pass(g => {
+  const cols = ['#e69c63', '#f1cc98', '#8b4f43', '#2a2622', '#f3dfb2', '#c56c41', '#1e1b1a'];
+  for (let i = 0; i < 2200; i++){ const x = R(0, W), y = R(0, H), s = Math.pow(rnd(), 3) * 3 + .5;
+    g.fillStyle = css(hx(pick(cols)), R(.15, .55)); g.beginPath(); g.ellipse(x, y, s, s * R(.4, 1), R(0, 3), 0, 6.283); g.fill(); }
+  for (let i = 0; i < 160; i++){ const x = R(0, W), y = R(0, H);   // 落ちた粉を指が引きずった筋
+    pencil(g, x, y, x + R(-14, 14), y + R(4, 26), hx(pick(['#2a2622', '#c56c41', '#f1cc98'])), R(.08, .2), R(1.5, 3)); }
+}, { mask: 'light' }));
+// フィルムのような粒子（紙の目とは別の、ごく細かいざらつき）
+T(() => {
+  const gw = W / 2 | 0, gh = H / 2 | 0, c = mk(gw, gh), g = c.getContext('2d'), id = g.createImageData(gw, gh);
+  for (let i = 0; i < gw * gh; i++){ const v = 128 + gauss() * 34; id.data[i * 4] = v; id.data[i * 4 + 1] = v * .99; id.data[i * 4 + 2] = v * .96; id.data[i * 4 + 3] = 255; }
+  g.putImageData(id, 0, 0);
+  ctx.save(); ctx.globalCompositeOperation = 'soft-light'; ctx.globalAlpha = .28; ctx.imageSmoothingEnabled = false; ctx.drawImage(c, 0, 0, W, H); ctx.restore();
+});
+T(() => { document.title = '頂だけが知っている朝'; cv.dataset.done = '1'; });
+
+// ---------------------------------------------------------------- 実行（少しずつ描き進める）
+function run(){
+  const t0 = performance.now();
+  while (tasks.length && performance.now() - t0 < 24) tasks.shift()();
+  if (tasks.length) requestAnimationFrame(run);
+}
+requestAnimationFrame(run);
+})();
+</script>
+</body>
+</html>
