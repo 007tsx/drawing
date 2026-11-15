@@ -24,7 +24,9 @@
 */
 (() => {
 // ?h=1656 のように指定すると、縦の長さを変えて描く（Mac の画面比率など）。既定は 16:9
-const W = 2560, H = (() => { const m = /[?&]h=(\d+)/.exec(location.search); return m ? Math.max(1000, Math.min(2400, +m[1])) : 1440; })();
+const QS = new URLSearchParams(location.search);
+const CX = QS.has('cx') ? +QS.get('cx') : 0;          // 横の構図をずらす（縦長のスマホ用など）
+const W = QS.has('w') ? Math.max(800, Math.min(2560, +QS.get('w'))) : 2560, H = (() => { const m = /[?&]h=(\d+)/.exec(location.search); return m ? Math.max(1000, Math.min(3200, +m[1])) : 1440; })();
 document.getElementById('art').style.aspectRatio = W + ' / ' + H;
 document.getElementById('art').style.width = 'min(100vw, calc(100vh * ' + (W / H) + '))';
 // ---------------------------------------------------------------- 乱数とノイズ
@@ -196,7 +198,7 @@ function stickC(t){ const f = stickF(t), i = Math.floor(f), k = f - i; return mi
 const CAM = { ch: 27.9653, yaw: 0.391050, pitch: 0.0857801, f: 1499.93 };
 const RAILH = 11;                       // 海面からレール面までの高さ (m)
 const cyw = Math.cos(CAM.yaw), syw = Math.sin(CAM.yaw), cpt = Math.cos(CAM.pitch), spt = Math.sin(CAM.pitch);
-function P3(x, y, z){ const yy = y - CAM.ch, X = x * cyw - z * syw, Z = x * syw + z * cyw, Y = yy * cpt + Z * spt, Z2 = -yy * spt + Z * cpt; return [W / 2 + CAM.f * X / Z2, H / 2 - CAM.f * Y / Z2, Z2]; }
+function P3(x, y, z){ const yy = y - CAM.ch, X = x * cyw - z * syw, Z = x * syw + z * cyw, Y = yy * cpt + Z * spt, Z2 = -yy * spt + Z * cpt; return [W / 2 + CX + CAM.f * X / Z2, H / 2 - CAM.f * Y / Z2, Z2]; }
 const PM = (x, y, z) => P3(x, -2 * RAILH - y, z);   // 海面に映った位置
 const HOR = H / 2 - CAM.f * Math.tan(CAM.pitch);    // 水平線
 const TK = { x0: -17.3705, z0: 93.1730, phi: 0.704805, k1: 0.00361826, s1: 270.144, k2: -0.00312827, s2: 782.850 };
@@ -276,6 +278,7 @@ const STRATA = [];
 (() => {
   const XS = []; for (let x = -40; x <= W + 40; x += 8) XS.push(x);
   const faults = []; for (let i = 0; i < 7; i++) faults.push(R(.05, .95) * W);
+  if (H > 1700) faults.length = 0;   // 縦長の画面では、断層のずれが縦の帯に見えるので使わない
   faults.sort((a, b) => a - b);
   const pal = [
     ['#f3d7a6', '#efc690', '#f6e2bb'], ['#eab07c', '#e39a64', '#f0c08e'], ['#d98557', '#cf7448', '#e09060'],
@@ -290,7 +293,7 @@ const STRATA = [];
     const up = clamp(1 - y0 / HOR, 0, 1);
     const th = R(14, 34) * (1 + up * 1.6) * (rnd() < .15 ? 2 : 1);
     const amp = R(3, 14) * (1 + up * 2), f = R(.0012, .004), ph = R(0, 9), tilt = R(-.02, .02) * (.4 + up);
-    shift = shift.map(v => clamp(v + R(-1, 1) * R(3, 12) * (.4 + up), -40, 40));
+    shift = shift.map(v => clamp((H > 1700 ? v * .8 : v) + R(-1, 1) * R(3, 12) * (.4 + up), -40, 40));
     const top = XS.map((x, i) => { let dy = 0; faults.forEach((fx, j) => { if (x > fx) dy += shift[j]; });
       const t = prev[i] - th + Math.sin(x * f + ph) * amp + (x - W / 2) * tilt * .1 + (vn1(x / 60 + k * 7) - .5) * 5 + dy;
       return Math.min(t, prev[i] - 3); });
@@ -1278,7 +1281,7 @@ T(() => pass(g => {
 
 // ================================================================ 8b. 行き先：まだ描かれていない場所
 // 線路が向かう先だけ、絵の具が途中で止まり、紙がそのまま残っている。
-const VX = VAN[0] + 30, VY = HOR - 10, VRX = W * .2, VRU = H * .17, VRD = H * .09;
+const VX = VAN[0] + 30, VY = HOR - 10, VRX = 2560 * .2, VRU = 1440 * .17, VRD = 1440 * .09;
 const inVoid = (x, y) => { const dx = (x - VX) / VRX, dy = (y - VY) / (y < VY ? VRU : VRD); return dx * dx + dy * dy; };
 T(() => {
   // 「塗り残し」の形：楕円の芯と、横向きの筆致がそこで途切れたぎざぎざの縁
