@@ -1096,9 +1096,12 @@ const SARMS = [
   { h: 78, th: .2, tilt: -.25, L: 100, col: '#9fb7c9' },
 ];
 T(() => pass(g => {
+  // 縦の線を画面に対してまっすぐ立てる（広角の遠近で手前に倒れて見えるのを直す）
+  const baseX = P3(SIGN.x, -RAILH, SIGN.z)[0];
+  const PV = (x, y, z) => { const p = P3(x, y, z), c = P3(SIGN.x, y, SIGN.z); return [p[0] + baseX - c[0], p[1], p[2]]; };
   const W0 = 16, W1 = 10;
   let post;
-  const C0 = [SIGN.x, 0, SIGN.z], base = P3(SIGN.x, -RAILH, SIGN.z), d = base[2];
+  const C0 = [SIGN.x, 0, SIGN.z], base = PV(SIGN.x, -RAILH, SIGN.z), d = base[2];
   const F = (h, a = 1) => fogc(hx(h), d * a, base[0]);
   const toCam = v => { const q = [-v[0], CAM.ch - v[1], -v[2]], L = Math.hypot(...q); return q.map(x => x / L); };
   // 水面の映り（縦に長く揺れる暗い影）
@@ -1107,11 +1110,11 @@ T(() => pass(g => {
   // 道しるべの板
   const arms = SARMS.map(A => { const ct = Math.cos(A.th), st = Math.sin(A.th), cl = Math.cos(A.tilt), sl = Math.sin(A.tilt);
     const dir = [ct * cl, sl, st * cl], up = [-ct * sl, cl, -st * sl];
-    const at = (t, vy) => { const w = [SIGN.x + dir[0] * t + up[0] * vy, A.h + dir[1] * t + up[1] * vy, SIGN.z + dir[2] * t + up[2] * vy]; return P3(...w); };
+    const at = (t, vy) => { const w = [SIGN.x + dir[0] * t + up[0] * vy, A.h + dir[1] * t + up[1] * vy, SIGN.z + dir[2] * t + up[2] * vy]; return PV(...w); };
     const mid = [SIGN.x + dir[0] * A.L * .5, A.h + dir[1] * A.L * .5, SIGN.z + dir[2] * A.L * .5];
-    return { A, dir, up, at, depth: P3(...mid)[2], mid }; });
+    return { A, dir, up, at, depth: PV(...mid)[2], mid }; });
   arms.sort((p, q) => q.depth - p.depth);
-  const postDepth = P3(SIGN.x, 200, SIGN.z)[2];
+  const postDepth = PV(SIGN.x, 200, SIGN.z)[2];
   const drawArms = behind => { for (const ar of arms){ if ((ar.depth > postDepth) !== behind) continue;
     const { A, dir, up, at, mid } = ar, hh = 13;
     const n = [dir[1] * up[2] - dir[2] * up[1], dir[2] * up[0] - dir[0] * up[2], dir[0] * up[1] - dir[1] * up[0]];
@@ -1135,14 +1138,14 @@ T(() => pass(g => {
     }
     // 柱に巻きつく留め金（板と柱がつながっていることを示す）
     for (const dv of [hh * .55, -hh * .55]){ const yy = A.h + dv, w = lerp(W0, W1, (yy + RAILH) / (SIGN.top + RAILH)) / 2 + .8;
-      const band = [[-1, -1], [1, -1], [1, 1]].map(([a, b]) => P3(SIGN.x + a * w, yy, SIGN.z + b * w));
+      const band = [[-1, -1], [1, -1], [1, 1]].map(([a, b]) => PV(SIGN.x + a * w, yy, SIGN.z + b * w));
       pencilPath(g, band, F('#2e2420'), .85, 2.6); }
     const b0 = at(-2, 0); g.fillStyle = css(F('#3e302b'), .9); g.beginPath(); g.ellipse(b0[0], b0[1], 2.4, 2.4, 0, 0, 6.283); g.fill();
   }
   };
   drawArms(true);
   // 柱：すこし先細りの四角柱
-  post = (sx, sz, y) => { const w = lerp(W0, W1, (y + RAILH) / (SIGN.top + RAILH)); return P3(SIGN.x + sx * w / 2, y, SIGN.z + sz * w / 2); };
+  post = (sx, sz, y) => { const w = lerp(W0, W1, (y + RAILH) / (SIGN.top + RAILH)); return PV(SIGN.x + sx * w / 2, y, SIGN.z + sz * w / 2); };
   const YS = []; for (let i = 0; i <= 24; i++) YS.push(lerp(-RAILH, SIGN.top, i / 24));
   const faceA = YS.map(y => post(-1, -1, y)).concat(YS.slice().reverse().map(y => post(1, -1, y)));
   const faceB = YS.map(y => post(1, -1, y)).concat(YS.slice().reverse().map(y => post(1, 1, y)));
@@ -1154,7 +1157,7 @@ T(() => pass(g => {
   // 木目のような縦の筋
   for (let k = 0; k < 30; k++){ const sx = R(-1, 1), y0 = R(-RAILH, SIGN.top - 40), y1 = y0 + R(20, 90); const p1 = post(sx, -1, y0), p2 = post(sx, -1, Math.min(y1, SIGN.top)); pencil(g, p1[0], p1[1], p2[0], p2[1], F(rnd() < .5 ? '#6b5448' : '#c9a98a'), R(.2, .4), 1); }
   // 頂の小さな笠
-  const capY = SIGN.top + 4, cap = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => P3(SIGN.x + a * 8, capY, SIGN.z + b * 8)), apex = P3(SIGN.x, capY + 22, SIGN.z);
+  const capY = SIGN.top - .5, cap = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => PV(SIGN.x + a * 6.2, capY, SIGN.z + b * 6.2)), apex = PV(SIGN.x, capY + 18, SIGN.z);
   poly(g, [cap[0], cap[1], apex], F('#8a6c5c')); poly(g, [cap[1], cap[2], apex], F('#5f4b42'));
   drawArms(false);
   // 足もとの朝もや
