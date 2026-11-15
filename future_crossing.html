@@ -977,26 +977,38 @@ T(() => pass(g => {
   }
 }, { mask: 'med' }));
 // 波紋：電車が通り過ぎたところから、色の輪が海へひろがっていく。古い輪ほど大きく、淡く、それでも消えない
+// 同じ形の輪はひとつもない：生まれる間隔も、ひろがる速さも、ゆがみも、途切れ方も、それぞれ違う
 T(() => pass(g => {
-  const FRONT = CARS[1].s1;                         // 先頭が今いるところ
-  for (let sc = FRONT - 6; sc > -380; sc -= 20.6){
-    const age = FRONT - sc, t = trk(sc);
-    const cx = t.x, cz = t.z;
-    for (let ring = 0; ring < 2; ring++){
-      const r = 5 + age * .32 - ring * 5; if (r < 3) continue;
-      const fade = clamp(1 - age / 650, .3, 1);
-      const col = hx(ring % 2 ? '#2f9a58' : '#e8812f');
+  const FRONT = CARS[1].s1, cols = ['#e8812f', '#2f9a58', '#ef9a4a', '#4aa86c', '#d98a3a', '#7fb36a'];
+  let sc = FRONT - R(4, 14);
+  while (sc > -380){
+    const age = FRONT - sc, t = trk(sc), side = R(-1, 1) * 2;
+    const cx = t.x + Math.cos(t.phi) * side, cz = t.z - Math.sin(t.phi) * side;
+    const speed = R(.2, .42), nr = rnd() < .25 ? 1 : rnd() < .75 ? 2 : 3;
+    const sq = R(.8, 1.25), rot = R(0, 3.14), ph = R(0, 99);
+    for (let ring = 0; ring < nr; ring++){
+      const r = 4 + age * speed - ring * R(3, 8); if (r < 3) continue;
+      const fade = clamp(1 - age / R(550, 850), .3, 1) * R(.7, 1);
+      const col = hx(pick(cols));
+      // 輪の一部だけを描く（ときどき半分だけ、ときどき三分の一だけ）
+      const a0 = R(0, 6.283), span = rnd() < .3 ? 6.283 : R(1.6, 4.8);
       let seg = [];
-      const flush = () => { if (seg.length > 2){ const d = seg[0][2], lw = Math.max(1.8, Math.min(6.5, lwAt(d, .65))); const c = mixc(col, hx('#f6e3c0'), (1 - fade) * .35);
-        pastel(g, seg.map(q => [q[0], q[1]]), lw, c, (.32 + .33 * fade), { strands: Math.max(2, Math.round(lw / 1.6)), taper: .15, lw: [1.2, 2.6] }); pencilPath(g, seg.map(q => [q[0], q[1] - lw * .3]), mixc(c, hx('#fff1d8'), .5), .25 * fade, 1); } seg = []; };
-      const n = Math.round(clamp(r * .9, 60, 420));
+      const flush = () => { if (seg.length > 2){ const d = seg[0][2], lw = Math.max(2, Math.min(7.5, lwAt(d, R(.6, 1.05)))); const c = mixc(col, hx('#f6e3c0'), (1 - fade) * .4);
+        pastel(g, seg.map(q => [q[0], q[1]]), lw, c, (.42 + .36 * fade), { strands: Math.max(2, Math.round(lw / 1.6)), taper: .35, lw: [1.1, 2.6] });
+        if (rnd() < .5) pencilPath(g, seg.map(q => [q[0], q[1] - lw * .3]), mixc(c, hx('#fff1d8'), .5), .22 * fade, 1); } seg = []; };
+      const n = Math.round(clamp(r * .9 * span / 6.283, 30, 420));
       for (let i = 0; i <= n; i++){
-        const a = i / n * 6.283, q = P3(cx + Math.cos(a) * r, -RAILH, cz + Math.sin(a) * r);
-        if (q[2] < 6 || q[1] < HOR + 4 || q[0] < -80 || q[0] > W + 80 || q[1] > H + 80 || rnd() < .06){ flush(); continue; }
-        seg.push(q); if (seg.length > 24) { flush(); seg = [q]; }
+        const a = a0 + i / n * span;
+        // 半径をゆらす：波は風や潮に押されて、まるくはひろがらない
+        const rr = r * (1 + .14 * (vn1(ph + Math.cos(a) * 2 + 7) - .5) * 2 + .06 * Math.sin(a * 3 + ph));
+        const ex = Math.cos(a) * rr * sq, ez = Math.sin(a) * rr / sq;
+        const q = P3(cx + ex * Math.cos(rot) - ez * Math.sin(rot), -RAILH, cz + ex * Math.sin(rot) + ez * Math.cos(rot));
+        if (q[2] < 6 || q[1] < HOR + 4 || q[0] < -80 || q[0] > W + 80 || q[1] > H + 80 || rnd() < .04){ flush(); continue; }
+        seg.push(q); if (seg.length > R(12, 30)) { flush(); seg = [q]; }
       }
       flush();
     }
+    sc -= R(9, 34) * (rnd() < .15 ? 2.2 : 1);      // 生まれる間隔もふぞろい
   }
 }, { mask: 'med' }));
 // 色鉛筆の細い糸：橋の足元から、手前の海へゆっくりほどけていく
