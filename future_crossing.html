@@ -720,31 +720,40 @@ function drawCar(g, car, mir){
   for (const w of F.wins.concat(F.deckWins)){ const [a, b, v0, v1] = w; if (d < 420) seeThrough(a, b, v0, v1); else { const pts = roundWin(G, a, b, v0, v1, fogc(hx('#b98a66'), d, x0), g); } }
   // 運転台の顔（立体）
   if (car.cab === 'F') drawNose(g, G, car, 20, false, d, x0);
-  // 屋根の上：冷房装置 — 屋根の丸みに足元を合わせた、幅広で低い箱
+  // 屋根の上：冷房装置（写真02・10・11・14）
+  //  普通車：屋根のほぼ中央に1台 / 先頭車：運転台と反対側へ寄せて（連結側から約1/3） / 2階建てグリーン車：2階建て部分には無く、平屋の端の上に1台
   {
     const RW = [[0, 3.62], [.6, 3.59], [1.0, 3.52], [1.28, 3.38], [1.42, 3.18]];
     const roofV = (u, w) => { const aw = Math.abs(w); let v = RW[RW.length - 1][1]; for (let i = 0; i < RW.length - 1; i++) if (aw <= RW[i + 1][0]){ v = lerp(RW[i][1], RW[i + 1][1], (aw - RW[i][0]) / (RW[i + 1][0] - RW[i][0])); break; } return v + prof(car, u).crest - 3.62; };
-    const u0 = 8.2, u1 = 11.8, wN = 1.05, wF = -1.05, hTop = .34;
-    const topV = u => prof(car, u).crest + hTop;
+    let uc = 10;
+    if (car.type === 'saro') uc = car.outerFront ? 20 - 2.6 : 2.6;
+    else if (car.cab === 'F') uc = 6.8; else if (car.cab === 'R') uc = 13.2;
+    const u0 = uc - 1.9, u1 = uc + 1.9, wB = 1.12, wT = .78, hS = .16, hT = .4;
+    const base = u => prof(car, u).crest;
     const camEnd = (-(G.A.x) * -G.tx + -(G.A.z) * -G.tz) > 0 ? u0 : u1;
-    // 足元の影（屋根に落ちる）
-    poly(g, [at(u0 - .15, wN + .12, roofV(u0, wN + .12)), at(u1 + .15, wN + .12, roofV(u1, wN + .12)), at(u1 + .15, .2, roofV(u1, .2)), at(u0 - .15, .2, roofV(u0, .2))], fogc(hx('#5f5a55'), d, x0), .55);
-    // カメラ側の端面：下辺は屋根の曲線に沿う
-    const endPts = []; for (let i = 0; i <= 8; i++){ const w = lerp(wN, wF, i / 8); endPts.push(at(camEnd, w, roofV(camEnd, w))); }
-    endPts.push(at(camEnd, wF, topV(camEnd)), at(camEnd, wN, topV(camEnd)));
+    // 屋根に落ちる影
+    poly(g, [at(u0 - .15, wB + .14, roofV(u0, wB + .14)), at(u1 + .15, wB + .14, roofV(u1, wB + .14)), at(u1 + .15, .2, roofV(u1, .2)), at(u0 - .15, .2, roofV(u0, .2))], fogc(hx('#5f5a55'), d, x0), .55);
+    // 端面：下は屋根の曲線、上は肩の丸い輪郭
+    const prof2 = [[wB, 0], [wB, hS], [wT + .12, hT - .04], [wT, hT], [-wT, hT], [-wT - .12, hT - .04], [-wB, hS], [-wB, 0]];
+    const endPts = [];
+    for (let i = 0; i <= 8; i++){ const w = lerp(wB, -wB, i / 8); endPts.push(at(camEnd, w, roofV(camEnd, w))); }
+    for (let i = prof2.length - 1; i >= 0; i--){ const [w, h] = prof2[i]; endPts.push(at(camEnd, w, base(camEnd) + h)); }
     poly(g, endPts, fogc(hx('#8c867f'), d, x0));
-    // 手前の側面
-    poly(g, [at(u0, wN, roofV(u0, wN)), at(u1, wN, roofV(u1, wN)), at(u1, wN, topV(u1)), at(u0, wN, topV(u0))], fogc(hx('#9a948c'), d, x0));
-    // 上面（朝日を受ける）
-    const top = [at(u0, wN, topV(u0)), at(u1, wN, topV(u1)), at(u1, wF, topV(u1)), at(u0, wF, topV(u0))];
-    poly(g, top, fogc(hx('#cdb99c'), d, x0));
-    // 上面のファン2つと、側面のスリット
-    for (const uc of [9.2, 10.8]){ const c = at(uc, 0, topV(uc) + .01), r = lwAt(d, .38); g.fillStyle = css(fogc(hx('#77706a'), d, x0), .8); g.beginPath(); g.ellipse(c[0], c[1], r, r * .45, 0, 0, 6.283); g.fill(); }
-    if (d < 300) for (let k = 0; k < 8; k++){ const u = u0 + .3 + k * .43, q1 = at(u, wN, roofV(u, wN) + .06), q2 = at(u, wN, topV(u) - .06); pencil(g, q1[0], q1[1], q2[0], q2[1], fogc(hx('#5a5550'), d, x0), .45, lw * .8); }
-    // 屋根と接する線を濃く、上の縁は明るく
-    pencilPath(g, [at(u0, wN, roofV(u0, wN)), at(u1, wN, roofV(u1, wN))], fogc(hx('#36312e'), d, x0), .75, lw * 1.3);
+    // 手前の側面（グリル）と、丸い肩、上面
+    poly(g, [at(u0, wB, roofV(u0, wB)), at(u1, wB, roofV(u1, wB)), at(u1, wB, base(u1) + hS), at(u0, wB, base(u0) + hS)], fogc(hx('#a29a90'), d, x0));
+    poly(g, [at(u0, wB, base(u0) + hS), at(u1, wB, base(u1) + hS), at(u1, wT, base(u1) + hT), at(u0, wT, base(u0) + hT)], fogc(hx('#b9ad9c'), d, x0));
+    poly(g, [at(u0, wT, base(u0) + hT), at(u1, wT, base(u1) + hT), at(u1, -wT, base(u1) + hT), at(u0, -wT, base(u0) + hT)], fogc(hx('#d2bfa2'), d, x0));
+    poly(g, [at(u0, -wT, base(u0) + hT), at(u1, -wT, base(u1) + hT), at(u1, -wB, base(u1) + hS), at(u0, -wB, base(u0) + hS)], fogc(hx('#e6c696'), d, x0));
+    // 上面の丸いファンと、側面のスリット
+    const fc = at(uc - .6, 0, base(uc) + hT + .01), fr = lwAt(d, .42);
+    g.fillStyle = css(fogc(hx('#6f6862'), d, x0), .85); g.beginPath(); g.ellipse(fc[0], fc[1], fr, fr * .42, Math.atan2(at(u1, 0, 4)[1] - at(u0, 0, 4)[1], at(u1, 0, 4)[0] - at(u0, 0, 4)[0]), 0, 6.283); g.fill();
+    if (d < 300){
+      for (let k = 0; k < 9; k++){ const u = u0 + .3 + k * .38, q1 = at(u, wB, roofV(u, wB) + .03), q2 = at(u, wB, base(u) + hS - .02); pencil(g, q1[0], q1[1], q2[0], q2[1], fogc(hx('#5a5550'), d, x0), .45, lw * .8); }
+      for (let k = 0; k < 4; k++){ const u = uc + .2 + k * .35, q1 = at(u, .6, base(u) + hT + .01), q2 = at(u, -.6, base(u) + hT + .01); pencil(g, q1[0], q1[1], q2[0], q2[1], fogc(hx('#7b736b'), d, x0), .45, lw * .7); }
+    }
+    pencilPath(g, [at(u0, wB, roofV(u0, wB)), at(u1, wB, roofV(u1, wB))], fogc(hx('#36312e'), d, x0), .75, lw * 1.3);
     pencilPath(g, endPts.slice(0, 9), fogc(hx('#36312e'), d, x0), .6, lw);
-    pencilPath(g, [at(u0, wN, topV(u0)), at(u1, wN, topV(u1))], fogc(hx('#efdcbc'), d, x0), .55, lw * .8);
+    pencilPath(g, [at(u0, -wT, base(u0) + hT), at(u1, -wT, base(u1) + hT)], fogc(hx('#f3dcb4'), d, x0), .55, lw * .8);
   }
   // パンタグラフの台座
   if (car.panto){ const u = car.panto, pb = [at(u - 1.2, .7, prof(car, u).crest + .1), at(u + 1.2, .7, prof(car, u).crest + .1), at(u + 1.2, -.7, prof(car, u).crest + .1), at(u - 1.2, -.7, prof(car, u).crest + .1)];
