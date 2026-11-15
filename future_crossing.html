@@ -251,79 +251,99 @@ function paintLobe(g, lb, base, mid, hi, ld, d1, d2){
   g.restore(); g.restore();
 }
 
-// ---------------------------------------------------------------- 2. 高い空に浮かぶ雲のいかだ（腹を朝日に染めて）
-const RAFTS = [];
+// ---------------------------------------------------------------- 2. 時間が積み重なる空
+// 地平線から上へ、色の層が少しずつずれて重なっていく。下ほど「いま」、上ほど遠い時間。
+// ところどころ断層のように横にずれ、上へ行くほど層はほどけて、紙の白に戻っていく。
+const STRATA = [];
 (() => {
-  const spots = [[.08, .06, 1.35], [.33, .03, 1.2], [.6, .07, 1.1], [.86, .04, 1.25], [.2, .17, .9], [.47, .15, .85], [.72, .19, .8], [.95, .16, .85],
-                 [.05, .27, .65], [.3, .26, .6], [.55, .28, .55], [.8, .3, .55], [.15, .35, .42], [.4, .36, .4], [.64, .37, .38], [.9, .38, .4]];
-  for (const [fx, fy, sc] of spots){
-    const cx = (fx + R(-.03, .03)) * W, cy = (fy + R(-.015, .015)) * H, len = W * .2 * sc * R(.7, 1.3);
-    const n = Math.round(10 + 14 * sc), lobes = [];
-    for (let i = 0; i < n; i++){ const u = R(-.5, .5), r = H * .028 * sc * R(.6, 1.3) * (1 - Math.abs(u) * .9);
-      lobes.push({ x: cx + u * len, y: cy + R(-.4, .4) * r + Math.abs(u) * r * .8, r, sq: R(.5, .7) }); }
-    lobes.sort((a, b) => a.y - b.y);
-    for (const lb of lobes) lb.P = lobeShape(lb.x, lb.y, lb.r, .55, lb.sq);
-    RAFTS.push({ cx, cy, sc, lobes });
+  const XS = []; for (let x = -40; x <= W + 40; x += 8) XS.push(x);
+  const faults = []; for (let i = 0; i < 7; i++) faults.push(R(.05, .95) * W);
+  faults.sort((a, b) => a - b);
+  const pal = [
+    ['#f3d7a6', '#efc690', '#f6e2bb'], ['#eab07c', '#e39a64', '#f0c08e'], ['#d98557', '#cf7448', '#e09060'],
+    ['#c46a4a', '#b65e44', '#cf7a56'], ['#a95f4e', '#9c5548', '#b56d58'], ['#8f6a5c', '#83614f', '#9b7666'],
+    ['#7d7462', '#6f6b58', '#8a7f6a'], ['#a3876a', '#967a5f', '#b09376'], ['#b9714f', '#ad6646', '#c47f5c'],
+    ['#6e5a50', '#5f4f47', '#7b665a'], ['#8a8a6e', '#7c7d63', '#98977a'], ['#c08b6a', '#b27d5e', '#cb9a7a'],
+    ['#5b4c48', '#4e423f', '#695852'], ['#9a7f70', '#8d7366', '#a88c7d'], ['#7a6b5d', '#6d5f53', '#877869'],
+  ];
+  let prev = XS.map(x => HOR + 4);
+  let y0 = HOR + 4, k = 0, shift = faults.map(() => 0);
+  while (y0 > -80){
+    const up = clamp(1 - y0 / HOR, 0, 1);
+    const th = R(14, 34) * (1 + up * 1.6) * (rnd() < .15 ? 2 : 1);
+    const amp = R(3, 14) * (1 + up * 2), f = R(.0012, .004), ph = R(0, 9), tilt = R(-.02, .02) * (.4 + up);
+    shift = shift.map(v => clamp(v + R(-1, 1) * R(3, 12) * (.4 + up), -40, 40));
+    const top = XS.map((x, i) => { let dy = 0; faults.forEach((fx, j) => { if (x > fx) dy += shift[j]; });
+      const t = prev[i] - th + Math.sin(x * f + ph) * amp + (x - W / 2) * tilt * .1 + (vn1(x / 60 + k * 7) - .5) * 5 + dy;
+      return Math.min(t, prev[i] - 3); });
+    STRATA.push({ k, up, bot: prev, top, col: pal[k % pal.length], th });
+    prev = top; y0 = Math.min(...top); k++;
   }
+  STRATA.XS = XS; STRATA.faults = faults;
 })();
 T(() => pass(g => {
-  for (const rf of RAFTS){
-    const elev = 1 - rf.cy / HOR, t = skyT(rf.cx, rf.cy);
-    for (const lb of rf.lobes){
-      const base = jit(mixc(mixc(stickC(clamp(t - .06, 0, 1)), hx('#8a5c52'), .4), hx('#b0705a'), smooth(.25, .75, 1 - elev) * .5 + R(0, .15)), 6);
-      const mid = jit(mixc(hx('#c96f4c'), hx('#e79c68'), R(0, 1) * .7 + (1 - elev) * .3), 6);
-      const hi = rnd() < .7 ? jit(mixc(hx('#f0b27d'), hx('#f6d3a2'), 1 - elev), 5) : null;
-      // 光は右下（太陽）から：腹と右の縁に
-      paintLobe(g, lb, base, mid, hi, [(lb.x < SUNP[0] ? 1 : -1) * .3, -1], lb.r * lb.sq * R(1.0, 1.5), lb.r * lb.sq * R(.2, .4));
+  const XS = STRATA.XS;
+  for (const L of STRATA){
+    const fray = smooth(.45, .95, L.up);                      // 上へ行くほどほどける
+    const base = hx(L.col[0]);
+    // 層の面：下は地平の光を受けて明るく、上は空気に沈む
+    const pts = XS.map((x, i) => [x, L.top[i]]).concat(XS.map((x, i) => [x, L.bot[i]]).reverse());
+    const P = new Path2D(); pts.forEach((p, i) => i ? P.lineTo(p[0], p[1]) : P.moveTo(p[0], p[1])); P.closePath();
+    if (fray < .9){ g.fillStyle = css(base, .92 * (1 - fray)); g.fill(P); }
+    g.save(); g.clip(P);
+    const n = Math.round((W / 60) * (1 - fray * .55));
+    for (let i = 0; i < n; i++){
+      const j = Math.floor(R(0, XS.length - 1)), x = XS[j], y = lerp(L.top[j], L.bot[j], R(.1, .9));
+      const j2 = Math.min(XS.length - 1, j + Math.floor(R(8, 40))), slope = ((L.top[j2] + L.bot[j2]) - (L.top[j] + L.bot[j])) / 2 / (XS[j2] - x + 1);
+      pastel(g, pathPts(x, y, Math.atan(slope) + R(-.02, .02), XS[j2] - x, 0, 5), R(4, Math.max(5, L.th * .5)), jit(hx(pick(L.col)), 8), R(.5, .85) * (1 - fray * .4), { taper: .35 });
+    }
+    g.restore();
+    // 層の下の縁：太陽に近いところだけ、朝の光を受けて淡く光る（セル塗りの細い縁）
+    for (let i = 0; i < XS.length - 1; i += 2){
+      const x = XS[i], near = 1 - clamp(Math.abs(x - SUNP[0]) / (W * .38), 0, 1);
+      if (near < .05 || rnd() < .3) continue;
+      pencil(g, x, L.bot[i] - 1.5, XS[i + 2] || x + 16, (L.bot[i + 2] || L.bot[i]) - 1.5, mixc(hx('#f6d6a2'), hx('#fff3dc'), near), .3 + .6 * near * (1 - fray), 1.2 + 1.6 * near);
     }
   }
 }, { mask: 'heavy' }));
-T(() => pass(g => {   // 雲の陰に色鉛筆の輪郭を少し
-  for (const rf of RAFTS) for (const lb of rf.lobes){ if (rnd() < .8) continue;
-    pencilPath(g, arcPts(lb.x, lb.y, lb.r * .95, R(3.4, 4.4), R(.6, 1.4), 8, lb.sq), hx('#4a3633'), R(.2, .4), R(1, 1.6)); }
+// 層と層の境目：堆積の線を鉛筆で。断層ではずれて、ときどき二重になる
+T(() => pass(g => {
+  const XS = STRATA.XS;
+  for (const L of STRATA){
+    const fray = smooth(.45, .95, L.up); let seg = [];
+    for (let i = 0; i < XS.length; i++){
+      if (rnd() < .04 + fray * .2){ if (seg.length > 2) pencilPath(g, seg, hx('#4a3a35'), R(.25, .5) * (1 - fray * .6), R(.9, 1.6)); seg = []; continue; }
+      seg.push([XS[i], L.top[i] + R(-.4, .4)]);
+    }
+    if (seg.length > 2) pencilPath(g, seg, hx('#4a3a35'), R(.25, .5) * (1 - fray * .6), R(.9, 1.6));
+  }
+  for (const fx of STRATA.faults){   // 断層：細い縦の割れ目
+    let y = HOR - R(20, 80); const y1 = R(0, HOR * .4); const pts = [];
+    while (y > y1){ pts.push([fx + R(-2, 2), y]); y -= R(10, 30); }
+    pencilPath(g, pts, hx('#3e302c'), .35, 1.1);
+  }
 }, { mask: 'med' }));
-// ---------------------------------------------------------------- 3. 水平線に立ち上がる「雲の大陸」— 地球の丸みの向こうから
-const CONT = [];
-(() => {
-  const ranges = [{ x0: .47 * W, x1: 1.1 * W, top: H * .56, peak: .78 }, { x0: -.08 * W, x1: .24 * W, top: H * .13, peak: .4 }];
-  for (const rg of ranges){
-    const prof = u => { const e = Math.exp(-Math.pow((u - rg.peak) / .32, 2)); return rg.top * (.25 + .75 * e) * (u < .04 || u > .96 ? .5 : 1) * (.85 + .3 * vn1(u * 7 + rg.x0)); };
-    for (let i = 0; i < (rg.top > H * .3 ? 190 : 90); i++){
-      const u = R(0, 1), x = lerp(rg.x0, rg.x1, u), topY = HOR - prof(u);
-      const edge = rnd() < .55, r = H * R(.035, .075) * Math.sqrt(rg.top / (H * .3)) * (edge ? 1 : 1.3);
-      const y = edge ? topY + r * R(.5, .9) : lerp(topY + r, HOR + 10, Math.pow(rnd(), .7));
-      CONT.push({ x, y, r, edge, rg, P: lobeShape(x, y, r, .7) });
-    }
+T(() => smear(g => fingers(g, 200, -100, 0, W + 100, HOR, 0, [80, 280], [3, 10]), 6, 0, 3, .22, 2));
+// 上の空：層がほどけて紙の白に戻る（紙をそのまま見せる）
+T(() => {
+  const M = mk(), mg = M.getContext('2d');
+  for (let i = 0; i < 2400; i++){
+    const y = Math.pow(rnd(), 1.6) * H * .34, dens = 1 - y / (H * .34);
+    if (rnd() > dens + .15) continue;
+    const x = R(-100, W), len = R(60, 380) * (.5 + dens);
+    mg.globalAlpha = clamp(dens * R(.5, 1.1), 0, 1);
+    pastel(mg, pathPts(x, y, R(-.03, .03), len, 0, 4), R(3, 12), [0, 0, 0], 1, { strands: 3, taper: .5 });
   }
-  for (const rg of ranges){ if (rg.top < H * .3) continue;
-    for (let i = 0; i < 70; i++){ const u = R(.05, .98), x = lerp(rg.x0, rg.x1, u), e = Math.exp(-Math.pow((u - rg.peak) / .32, 2));
-      const topY = HOR - rg.top * (.25 + .75 * e) * (.85 + .3 * vn1(u * 7 + rg.x0)); const r = H * R(.015, .03);
-      CONT.push({ x, y: topY + r * R(-.2, .6), r, edge: true, rg, P: lobeShape(x, topY + r * .2, r, .7) }); } }
-  CONT.sort((a, b) => (a.edge - b.edge) || (b.y - a.y));
-})();
+  mg.globalAlpha = 1; mg.globalCompositeOperation = 'destination-out'; mg.globalAlpha = .45; mg.drawImage(MASK.light, 0, 0);
+  const P = mk(), pg = P.getContext('2d'); pg.drawImage(PAPERC, 0, 0); pg.globalCompositeOperation = 'destination-in'; pg.drawImage(M, 0, 0);
+  ctx.drawImage(P, 0, 0);
+});
+// ほどけた層の糸：紙の白の中を、色の細い線が数本だけ横切っていく
 T(() => pass(g => {
-  g.save(); g.clip(new Path2D(`M-10 -10H${W + 10}V${HOR - 1}H-10Z`));
-  for (const lb of CONT){
-    const h = clamp((HOR - lb.y) / (H * .45), 0, 1), towardSun = 1 - clamp(Math.abs(lb.x - SUNP[0]) / (W * .8), 0, 1);
-    // 遠い雲は空気の色に沈む。頂ほど早く朝日を受ける
-    const base = jit(mixc(hx('#b88a6e'), hx('#dcae88'), h * .5 + towardSun * .4), 5);
-    const mid = jit(mixc(hx('#eab07e'), hx('#f6d2a0'), h), 5);
-    const hi = (lb.edge ? rnd() < .85 : (h > .45 && rnd() < .35)) ? jit(mixc(hx('#f6dcb2'), hx('#fff3de'), h), 4) : null;
-    const dir = lb.x < SUNP[0] ? [-1, -.3] : [1, -.3];
-    paintLobe(g, lb, base, mid, hi, [dir[0] * R(.6, 1.2), dir[1] - R(0, .5)], lb.r * (lb.edge ? R(.3, .6) : R(.15, .45)), lb.r * R(.06, .14));
-  }
-  g.restore();
-}, { mask: 'heavy' }));
-T(() => smear(g => { for (const lb of CONT) if (!lb.edge && rnd() < .5){ g.moveTo(lb.x + lb.r, lb.y); g.ellipse(lb.x, lb.y, lb.r * .8, lb.r * .5, 0, 0, 6.283); } }, 0, -3, 3, .22, 4));
-T(() => pass(g => {   // 大陸の陰のひだを色鉛筆で
-  for (const lb of CONT){ if (rnd() < .45) continue; const dir = lb.x < SUNP[0] ? Math.PI : 0;
-    pencilPath(g, arcPts(lb.x, lb.y, lb.r * .93, dir + R(-1.6, -.6), R(.5, 1.2), 8), hx('#7d5a52'), R(.2, .45), R(.9, 1.6)); }
-}, { mask: 'med', clip: c => c.rect(0, 0, W, HOR - 1) }));
-// 裾を地平のもやに溶かす
-T(() => pass(g => {
-  for (let i = 0; i < 600; i++){ const x = R(-60, W), d = Math.pow(rnd(), 1.3), y = HOR - d * 120, t = skyT(x, y);
-    pastel(g, pathPts(x, y, R(-.01, .01), R(80, 300), 0, 5), R(6, 16), mixc(stickC(Math.min(1, t + .05)), hx('#f3dcb6'), .35), (1 - d) * .55); }
-}, { mask: 'heavy' }));
+  for (let i = 0; i < 70; i++){ const y = R(0, H * .3), x = R(-100, W), len = R(150, 700);
+    const L = STRATA[Math.min(STRATA.length - 1, Math.floor(R(.4, 1) * STRATA.length))];
+    pencilPath(g, pathPts(x, y, R(-.02, .02), len, R(-.0008, .0008), 14), hx(pick(L.col)), R(.35, .7), R(1, 2.2)); }
+}, { mask: 'med' }));
 
 // ---------------------------------------------------------------- 4. 水平線の蜃気楼 — 見たことのない岸辺が、横に引き伸ばされて浮かぶ
 T(() => pass(g => {
