@@ -648,16 +648,22 @@ function drawCar(g, car, mir){
     const q1 = at(a + .03, HW, (v0 + v1) / 2), q2 = at(b - .03, HW, (v0 + v1) / 2 + R(-.01, .01)), w = Math.max(1, Math.abs(at(a, HW, v1)[1] - at(a, HW, v0)[1]));
     pastel(g, [q1, [(q1[0] + q2[0]) / 2, (q1[1] + q2[1]) / 2], q2], w * 1.05, jit(fogc(hx(hexc), d, x0), 10), .7, { strands: Math.max(2, Math.round(w / 1.6)), taper: .1, lw: [.9, 1.8] }); };
   // --- 床下：機器箱と台車
-  poly(g, [at(.4, 1.05, 1.0), at(19.6, 1.05, 1.0), at(19.6, 1.05, .2), at(.4, 1.05, .2)], fogc(hx('#2a2725'), d, x0), .9);   // 床下の暗がり
-  poly(g, [at(3.6, 1.1, .95), at(16.4, 1.1, .95), at(16.4, 1.1, .32), at(3.6, 1.1, .32)], fogc(hx('#353231'), d, x0));
-  for (let k = 0; k < 5; k++){ const a = R(4, 15), b = a + R(.6, 1.6); poly(g, [at(a, 1.2, .9), at(b, 1.2, .9), at(b, 1.2, R(.35, .55)), at(a, 1.2, R(.35, .55))], fogc(hx(pick(['#4a4644', '#3f3b3a', '#57514d'])), d, x0)); }
-  for (const bc of [2.6, 17.4]){
-    for (const w of [-.85, .85]){ const c = at(bc + w, 1.06, .43), r = lwAt(d, .4); g.fillStyle = css(fogc(hx('#151413'), d, x0)); g.beginPath(); g.ellipse(c[0], c[1], r, r * .95, 0, 0, 6.283); g.fill(); }
-    poly(g, [at(bc - 1.25, 1.22, .74), at(bc - .35, 1.22, .62), at(bc + .35, 1.22, .62), at(bc + 1.25, 1.22, .74), at(bc + 1.25, 1.22, .5), at(bc + .35, 1.22, .36), at(bc - .35, 1.22, .36), at(bc - 1.25, 1.22, .5)], fogc(hx('#4a4644'), d, x0));
-    for (const w of [-.85, .85]){ const c = at(bc + w, 1.16, .45), r = lwAt(d, .11);
-      g.fillStyle = css(fogc(hx('#262322'), d, x0)); g.beginPath(); g.ellipse(c[0], c[1], r, r * .95, 0, 0, 6.283); g.fill();
-      g.strokeStyle = css(fogc(hx('#8a7d70'), d, x0), .6); g.lineWidth = Math.max(.6, r * .12); g.beginPath(); g.ellipse(c[0], c[1], r * .8, r * .78, 0, 0, 6.283); g.stroke(); }
+  // 床下（写真01・20、軌間1067mmに対して車体幅2950mm）：台車は車体の中心に寄った小さなもので、
+  // 大きく張り出した車体の下の、深い影の奥にある。車輪径約0.86m・軸距約2.1m・台車中心は車端から約3.1m
+  poly(g, [at(.3, .62, 1.0), at(19.7, .62, 1.0), at(19.7, .62, .18), at(.3, .62, .18)], fogc(hx('#1a1817'), d, x0));          // 奥の暗がり
+  for (const bc of [3.1, 16.9]){
+    for (const w of [-1.05, 1.05]){ const c = at(bc + w, .62, .43), r = lwAt(d, .43); g.fillStyle = css(fogc(hx('#0f0e0d'), d, x0)); g.beginPath(); g.ellipse(c[0], c[1], r, r * .95, 0, 0, 6.283); g.fill();
+      g.strokeStyle = css(fogc(hx('#5a5048'), d, x0), .5); g.lineWidth = Math.max(.6, r * .1); g.beginPath(); g.ellipse(c[0], c[1], r * .96, r * .92, 0, 3.4, 5.6); g.stroke(); }
+    // 台車枠（側枠）：車体の裾よりずっと内側
+    poly(g, [at(bc - 1.4, .98, .72), at(bc - .4, .98, .64), at(bc + .4, .98, .64), at(bc + 1.4, .98, .72), at(bc + 1.4, .98, .5), at(bc + .4, .98, .4), at(bc - .4, .98, .4), at(bc - 1.4, .98, .5)], fogc(hx('#34312f'), d, x0));
+    for (const w of [-1.05, 1.05]){ const c = at(bc + w, 1.0, .45), r = lwAt(d, .12); g.fillStyle = css(fogc(hx('#2a2725'), d, x0)); g.beginPath(); g.ellipse(c[0], c[1], r, r, 0, 0, 6.283); g.fill(); }
+    const e1 = at(bc - 1.4, .98, .72), e2 = at(bc + 1.4, .98, .72); pencil(g, e1[0], e1[1], e2[0], e2[1], fogc(hx('#6d6158'), d, x0), .35, Math.max(.6, lwAt(d, .03)));
   }
+  // 機器箱：台車のあいだ、車体の裾より内側
+  poly(g, [at(4.8, .95, .98), at(15.2, .95, .98), at(15.2, .95, .4), at(4.8, .95, .4)], fogc(hx('#2e2b29'), d, x0));
+  for (let k = 0; k < 5; k++){ const a = R(5, 14), b = a + R(.6, 1.6); poly(g, [at(a, 1.02, .95), at(b, 1.02, .95), at(b, 1.02, R(.42, .6)), at(a, 1.02, R(.42, .6))], fogc(hx(pick(['#3f3b39', '#36322f', '#48433f'])), d, x0)); }
+  // 張り出した車体が落とす影：台車と機器の上半分は暗く沈む
+  poly(g, [at(.3, 1.1, 1.02), at(19.7, 1.1, 1.02), at(19.7, 1.1, .7), at(.3, 1.1, .7)], fogc(hx('#141211'), d, x0), .55);
   // --- 車体の丸い断面（下ですぼまり、肩は大きく丸い）を、細い帯に分けて陰影をつける
   const SV = (u, v) => { const p = prof(car, u); return v > 3.0 ? v + (p.crest - 3.62) * smooth(3.0, 3.62, v) + (p.eave - 3.28) * (1 - smooth(3.0, 3.62, v)) : v < 1.2 ? v - (.95 - p.bot) * (1 - smooth(.95, 1.2, v)) : v; };
   const strip = (w0, v0, w1, v1, col) => poly(g, us.map(u => at(u, w0, SV(u, v0))).concat(us.slice().reverse().map(u => at(u, w1, SV(u, v1)))), fogc(hx(col), d, x0));
@@ -825,7 +831,7 @@ function drawNose(g, G, car, end, tail, d, x0){
   // 帯は顔から角を回って側面の帯につながる
   region(-1.5, 1.5, 1.46, 1.68, C('#2f8a55')); region(-1.5, 1.5, 1.68, 1.81, C('#e07a35'));
   if (!frontVis) return;
-  const gl = rrect(-1.28, 1.28, 1.9, 3.5, .17, C('#1b1e1f'));                   // 上半分の大きな黒い面
+  const gl = rrect(-1.27, 1.27, 1.9, 3.36, .17, C('#1b1e1f'));                   // 上半分の大きな黒い面
   if (tail){
     // 最後尾の運転室ごしに、だれもいない車内が奥まで続き、その先に朝の光（前の運転台の窓）が小さく見える
     g.save(); g.clip(polyPath(gl));
@@ -842,8 +848,8 @@ function drawNose(g, G, car, end, tail, d, x0){
   }
   const r1 = S(-.95, 3.3), r2 = S(-.2, 2.2); pencil(g, r1[0], r1[1], r2[0], r2[1], C('#806456'), .3, lwAt(d, .1));
   const r3 = S(.4, 3.3), r4 = S(.95, 2.4); pencil(g, r3[0], r3[1], r4[0], r4[1], C('#5d4a42'), .35, lwAt(d, .07));
-  region(-.38, .38, 3.27, 3.46, C('#3e2a1f'));                                      // 行先表示（文字は描かない）
-  for (const w of [-.92, .92]){ const q = S(w, 3.34, -.01); g.fillStyle = css(C('#ece6d6'), .9); g.beginPath(); g.ellipse(q[0], q[1], lwAt(d, .07), lwAt(d, .07), 0, 0, 6.283); g.fill(); }
+  region(-.38, .38, 3.14, 3.31, C('#3e2a1f'));                                      // 行先表示（文字は描かない）
+  for (const w of [-.92, .92]){ const q = S(w, 3.22, -.01); g.fillStyle = css(C('#ece6d6'), .9); g.beginPath(); g.ellipse(q[0], q[1], lwAt(d, .07), lwAt(d, .07), 0, 0, 6.283); g.fill(); }
   rrect(-1.27, 1.27, 1.14, 1.43, .09, C('#191818'));                                // 下の黒い帯
   for (const sd of [-1, 1]){ const w0 = sd > 0 ? .95 : -1.2, w1 = sd > 0 ? 1.2 : -.95; region(w0, w1, 1.2, 1.36, tail ? hx('#d9442f') : C('#4a2a26'));
     if (tail){ const q = S(sd * 1.08, 1.28, -.01); g.fillStyle = css(hx('#ff9b7a'), .9); g.beginPath(); g.ellipse(q[0], q[1], lwAt(d, .06), lwAt(d, .035), 0, 0, 6.283); g.fill(); } }
