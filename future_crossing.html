@@ -637,8 +637,8 @@ function drawCar(g, car, mir){
     const p1 = at(a, HW, v1), p2 = at(a, HW, v0), p3 = at(b, HW, v1), p4 = at(b, HW, v0);
     pencil(g, p1[0], p1[1], p2[0], p2[1], ink, .6, lw); pencil(g, p3[0], p3[1], p4[0], p4[1], ink, .6, lw);
     if (leaves === 2){ const m = (a + b) / 2, q1 = at(m, HW, v1), q2 = at(m, HW, v0); pencil(g, q1[0], q1[1], q2[0], q2[1], ink, .45, lw * .8);
-      roundWin(G, a + .14, m - .1, 2.05, 2.85, fogc(hx('#262a2b'), d, x0), g); roundWin(G, m + .1, b - .14, 2.05, 2.85, fogc(hx('#262a2b'), d, x0), g); }
-    else roundWin(G, a + .25, b - .25, 2.05, 2.85, fogc(hx('#262a2b'), d, x0), g);
+      roundWin(G, a + .14, m - .1, 2.05, 2.85, fogc(hx('#b58f76'), d, x0), g); roundWin(G, m + .1, b - .14, 2.05, 2.85, fogc(hx('#b58f76'), d, x0), g); }
+    else roundWin(G, a + .25, b - .25, 2.05, 2.85, fogc(hx('#b58f76'), d, x0), g);
   }
   if (F.crew){ const [a, b, v0, v1] = F.crew; sideQuad(G, a, b, v0, v1, fogc(hx('#2f8a55'), d, x0), 1, g); roundWin(G, a + .1, b - .1, 2.05, 2.85, fogc(hx('#262a2b'), d, x0), g);
     if (F.cabWin){ const [p, q, w0, w1] = F.cabWin; roundWin(G, p, q, w0, w1, fogc(hx('#1f2223'), d, x0), g); }
@@ -650,9 +650,27 @@ function drawCar(g, car, mir){
     for (const u of [a, b]){ const q1 = at(u, HW, 2.27), q2 = at(u, HW, 1.59); pencil(g, q1[0], q1[1], q2[0], q2[1], ink, .5, lw); } }
   // 窓（暗いガラスに空が少し映る）
   const glass = fogc(hx('#25292a'), d, x0), refl = fogc(hx('#8c6e5c'), d, x0);
-  for (const w of F.wins.concat(F.deckWins)){ const [a, b, v0, v1] = w; const pts = roundWin(G, a, b, v0, v1, glass, g);
-    const r1 = at(a + (b - a) * .15, HW, v1 - .1), r2 = at(a + (b - a) * .55, HW, v0 + .15); pencil(g, r1[0], r1[1], r2[0], r2[1], refl, .45, lwAt(d, .12));
-    pencilPath(g, pts.concat([pts[0]]), fogc(hx('#c7bcaf'), d, x0), .35, lw * .8); }
+  // 窓：向こう側の窓から朝の光が抜けてくる。人はいないが、毎日だれかを運んでいる車内の気配（つり革・網棚・座席の背）
+  const seeThrough = (a, b, v0, v1) => {
+    const pts = roundWin(G, a, b, v0, v1, fogc(mixc(hx('#dcb895'), hx('#b9917a'), R(0, .6)), d, x0), g);
+    g.save(); g.clip(polyPath(pts));
+    const q = (u, v) => at(u, HW - .02, v);
+    // 向こう側の窓枠（遠近で少しずれて見える）と、窓の下の壁
+    poly(g, [q(a - .2, v0 - .2), q(b + .2, v0 - .2), q(b + .2, v0 + .32), q(a - .2, v0 + .32)], fogc(hx('#6b5146'), d, x0), .85);
+    for (const t of [.12, .62]){ const uu = lerp(a, b, t + R(-.05, .05)); poly(g, [q(uu, v0), q(uu + .14, v0), q(uu + .14, v1), q(uu, v1)], fogc(hx('#5e4840'), d, x0), .55); }
+    // 座席の背（暗い帯）と、網棚の線
+    poly(g, [q(a - .2, v0 - .2), q(b + .2, v0 - .2), q(b + .2, v0 + .16), q(a - .2, v0 + .16)], fogc(hx('#3a2c28'), d, x0), .9);
+    const r1 = q(a - .2, v1 - .14), r2 = q(b + .2, v1 - .14); pencil(g, r1[0], r1[1], r2[0], r2[1], fogc(hx('#3b2e2a'), d, x0), .7, Math.max(.7, lwAt(d, .04)));
+    // つり革：網棚の少し下に、小さな輪が並んで下がる
+    if (d < 260) for (let u = a + .2; u < b - .1; u += .42){
+      const t1 = q(u, v1 - .2), t2 = q(u, v1 - .44); pencil(g, t1[0], t1[1], t2[0], t2[1], fogc(hx('#3b2e2a'), d, x0), .55, Math.max(.6, lwAt(d, .025)));
+      g.strokeStyle = css(fogc(hx('#3b2e2a'), d, x0), .6); g.lineWidth = Math.max(.6, lwAt(d, .025)); g.beginPath(); g.ellipse(t2[0], t2[1] + lwAt(d, .05), lwAt(d, .05), lwAt(d, .06), 0, 0, 6.283); g.stroke(); }
+    // ガラスに映る空（斜めの淡い線）
+    const s1 = q(a + (b - a) * .2, v1 - .05), s2 = q(a + (b - a) * .5, v0 + .3); pencil(g, s1[0], s1[1], s2[0], s2[1], fogc(hx('#fff0d6'), d, x0), .3, lwAt(d, .08));
+    g.restore();
+    pencilPath(g, pts.concat([pts[0]]), fogc(hx('#c7bcaf'), d, x0), .35, lw * .8);
+  };
+  for (const w of F.wins.concat(F.deckWins)){ const [a, b, v0, v1] = w; if (d < 420) seeThrough(a, b, v0, v1); else { const pts = roundWin(G, a, b, v0, v1, fogc(hx('#b98a66'), d, x0), g); } }
   // 運転台の顔（立体）
   if (car.cab === 'F') drawNose(g, G, car, 20, false, d, x0);
   // 屋根の上：冷房装置 — 屋根の丸みに足元を合わせた、幅広で低い箱
@@ -950,6 +968,20 @@ T(() => pass(g => {
   // 水平線は、定規を当てずに軽く引いた一本の線。途中で迷って二重になる
   for (let k = 0; k < 3; k++){ const y = HOR + R(-1.5, 1.5); let x = VX - VRX * .9;
     while (x < VX + VRX * .9){ const l = R(60, 220); if (rnd() < .75) pencil(g, x, y + R(-1, 1), x + l, y + R(-1, 1), gr, R(.15, .4), 1); x += l + R(4, 40); } }
+}, { mask: 'med' }));
+// 湘南色の二本の線が、白い紙の中へ、線路に沿ってかすかに続いていく（いつもの電車の色が、未知に最初に置かれる色）
+T(() => pass(g => {
+  let prev = null;
+  for (let sd = 500; sd < SMAX; sd += 30){
+    const c = TP(sd, 0, 0), v = inVoid(c[0], c[1]);
+    if (v > 1.3){ prev = null; continue; }
+    const k = clamp(v / 1.3, 0, 1), lw = lerp(.9, 2.6, k);          // 奥へ行くほど細く、途切れがちに
+    if (prev && rnd() < .55 + .45 * k){
+      pastel(g, [[prev[0], prev[1] - 2.2], [c[0], c[1] - 2.2]], lw, hx('#e8812f'), .55 + .3 * k, { strands: 2, taper: .2 });
+      pastel(g, [[prev[0], prev[1] + .2], [c[0], c[1] + .2]], lw * 1.3, hx('#2f9a58'), .5 + .3 * k, { strands: 2, taper: .2 });
+    }
+    prev = c;
+  }
 }, { mask: 'med' }));
 // 何かがありそうで、まだ形にならない。探るような線と、消しゴムで消した跡
 T(() => pass(g => {
