@@ -1040,6 +1040,53 @@ function drawStructure(g){
 T(() => { trainSeed = seed; pass(drawStructure, { mask: 'full' }); });
 T(() => { const after = seed; seed = trainSeed; pass(drawStructure, { mask: 'med', alpha: .35 }); seed = after; });
 T(() => pass(drawWires, { mask: 'med' }));
+// どこへも行かない階段：橋の横腹から海へ、ていねいに手すりまでつけて降りていくが、水面の少し上でふっと終わる。
+// 灯りはついている。なんのためかは、だれにもわからない。
+T(() => pass(g => {
+  const sg = camSide(20), oi = sg * (DECK_HW + .12), oo = sg * (DECK_HW + 1.5), s0 = 14, s1 = 26.6, y0 = -.3, y1 = -8.4, sL = 30.2;
+  const Pt = (ss, o, y) => TP(ss, o, y), d = depthAt(20), lw = Math.max(1.3, lwAt(d, .1));
+  const C = h => fogc(hx(h), d, Pt(20, 0, 0)[0]);
+  const steel = C('#55605b'), steelL = C('#c8a885'), rust = C('#8f5f45');
+  // 吊り材：桁の側面から斜めに支える
+  for (const ss of [16, 20.5, 25]){ const t = (ss - s0) / (s1 - s0), yy = lerp(y0, y1, t), a1 = Pt(ss - 2.5, sg * DECK_HW, GIRD_B + .2), b1 = Pt(ss, oo, yy - .25); pencil(g, a1[0], a1[1], b1[0], b1[1], steel, .7, lw); }
+  // 段：踏み板と蹴上げ
+  const N = 40;
+  for (let i = 0; i < N; i++){
+    const t0 = i / N, t1 = (i + 1) / N, sA = lerp(s0, s1, t0), sB = lerp(s0, s1, t1), yA = lerp(y0, y1, t0), yB = lerp(y0, y1, t1);
+    // 蹴上げ（暗い）と踏み板（朝の光を受けて明るい）
+    poly(g, [Pt(sA, oi, yA), Pt(sA, oo, yA), Pt(sA, oo, yB), Pt(sA, oi, yB)], C('#3b3936'));
+    poly(g, [Pt(sA, oi, yB), Pt(sB, oi, yB), Pt(sB, oo, yB), Pt(sA, oo, yB)], mixc(C('#c9b08c'), C('#ecd3a8'), rnd() * .6));
+    const e1 = Pt(sA, oi, yB), e2 = Pt(sA, oo, yB); pencil(g, e1[0], e1[1], e2[0], e2[1], C('#2c2a28'), .7, Math.max(1, lw * .7));
+  }
+  // 側桁（ささら）
+  for (const o of [oi, oo]){ const pts = []; for (let i = 0; i <= 12; i++){ const t = i / 12; pts.push(Pt(lerp(s0, s1, t), o, lerp(y0, y1, t) - .35)); } pencilPath(g, pts, o === oo ? steel : C('#3f4440'), .85, lw * 2.2); }
+  // 踊り場（ここで終わる）
+  poly(g, [Pt(s1, oi, y1), Pt(sL, oi, y1), Pt(sL, oo, y1), Pt(s1, oo, y1)], C('#b3a28c'));
+  poly(g, [Pt(s1, oo, y1), Pt(sL, oo, y1), Pt(sL, oo, y1 - .3), Pt(s1, oo, y1 - .3)], C('#4c4a46'));
+  poly(g, [Pt(sL, oi, y1), Pt(sL, oo, y1), Pt(sL, oo, y1 - .3), Pt(sL, oi, y1 - .3)], rust);
+  // 手すり：階段に沿って降り、踊り場の先で、ぷつりと終わる
+  const rail = []; for (let i = 0; i <= 12; i++){ const t = i / 12; rail.push(Pt(lerp(s0, s1, t), oo, lerp(y0, y1, t) + 1.0)); }
+  rail.push(Pt(sL - .15, oo, y1 + 1.0));
+  pencilPath(g, rail, steel, .9, lw * 1.4);
+  pencilPath(g, rail.map(q => [q[0] - .8, q[1] - .8]), steelL, .5, lw * .6);
+  for (let i = 0; i <= 6; i++){ const t = i / 6, ss = lerp(s0, s1, t), yy = lerp(y0, y1, t), a1 = Pt(ss, oo, yy), b1 = Pt(ss, oo, yy + 1.0); pencil(g, a1[0], a1[1], b1[0], b1[1], steel, .75, lw); }
+  for (const ss of [s1 + 1.3, sL - .15]){ const a1 = Pt(ss, oo, y1), b1 = Pt(ss, oo, y1 + 1.0); pencil(g, a1[0], a1[1], b1[0], b1[1], steel, .75, lw); }
+  // 錆の筋
+  for (let k = 0; k < 10; k++){ const ss = R(s0, sL), t = clamp((ss - s0) / (s1 - s0), 0, 1), yy = lerp(y0, y1, t) - .35, a1 = Pt(ss, oo, yy), b1 = Pt(ss + R(-.2, .2), oo, yy - R(.4, 1.2)); pencil(g, a1[0], a1[1], b1[0], b1[1], rust, R(.3, .55), lw * .8); }
+  // 踊り場の端の灯り：だれも来ない場所を、ちゃんと照らしている
+  const lp = Pt(sL - .4, oo, y1), lt = Pt(sL - .4, oo, y1 + 3.2), arm = Pt(sL + .5, oo, y1 + 3.2);
+  pencil(g, lp[0], lp[1], lt[0], lt[1], C('#3d403d'), .9, lw * 1.3);
+  pencil(g, lt[0], lt[1], arm[0], arm[1], C('#3d403d'), .9, lw * 1.1);
+  g.fillStyle = css(hx('#3d403d')); g.beginPath(); g.ellipse(arm[0], arm[1] + lw, lw * 3, lw * 1.4, 0, 0, 6.283); g.fill(); g.fillStyle = css(hx('#fff1cf'), .97); g.beginPath(); g.ellipse(arm[0], arm[1] + lw * 2.4, lw * 2.2, lw * 1.3, 0, 0, 6.283); g.fill();
+  // 灯りが踊り場の床に落ちる、小さな円
+  const fl = Pt(sL + .2, (oi + oo) / 2, y1 + .02);
+  for (let k = 0; k < 14; k++){ const a0 = R(0, 6.283), r = R(0, lw * 7); pastel(g, [[fl[0] + Math.cos(a0) * r, fl[1] + Math.sin(a0) * r * .4], [fl[0] + Math.cos(a0) * r + R(3, 9), fl[1] + Math.sin(a0) * r * .4]], R(1.5, 3), hx('#f6deae'), .4, { strands: 2, taper: .5 }); }
+  // 水面までの、あと少しの距離（何もない空気）の下に、灯りのゆれる映り
+  const m = PM(TP(0,0,0)[0] * 0, 0, 0); // placeholder to keep PM in scope
+  const tl = TP(sL + .5, oo, y1 + 3.2, true);
+  for (let k = 0; k < 16; k++){ const y = tl[1] + k * R(3, 6), x = tl[0] + R(-2, 2) * (1 + k * .3), len = R(4, 14);
+    if (y > H) break; pastel(g, [[x - len / 2, y], [x + len / 2, y]], 2.2, hx('#f7e3b8'), .7 - k * .04, { strands: 2, taper: .4 }); }
+}, { mask: 'heavy' }));
 // 尾灯の光が、いま通ってきた線路に落ちる：レールの頭が赤くひかり、枕木と砂利がうっすら赤く染まる
 T(() => pass(g => {
   const tail = CARS[15].s0;
