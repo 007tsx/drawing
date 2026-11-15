@@ -959,6 +959,33 @@ T(() => pass(g => {
   }
 }, { mask: 'med' }));
 
+// ================================================================ 7b. 通り過ぎたあとに残るもの
+// 電車がすでに通ってきた側（手前、過去）の海にだけ、湘南色のかけらが散って残っている。
+// どれだけ走っても持っていけるものはなく、残るのは、通り過ぎながら世界に与えた色だけ。
+const PAST = []; for (let sp = -380; sp <= 6; sp += 3){ const b = TP(sp, 0, -RAILH * .55); if (b[2] > 8 && b[0] > -60 && b[0] < W && b[1] < H + 40) PAST.push(b); }
+T(() => pass(g => {
+  const cols = ['#e8812f', '#ef9a4a', '#f2b170', '#2f9a58', '#4aa86c', '#8fbf7a', '#d9a14e'];
+  for (let i = 0; i < 5200; i++){
+    const b = pick(PAST);
+    const r = Math.pow(rnd(), 1.35) * 1100, a = R(.05, Math.PI * .85);  // 橋の足元から手前の海へ広がる
+    let x = b[0] + Math.cos(a) * r * 1.5, y = b[1] + Math.sin(a) * r * .5 + R(-6, 6);
+    if (y < HOR + 30 || y > H + 10 || x < -20 || x > W + 20) continue;
+    const near = 1 - clamp(r / 1100, 0, 1), dd = (y - HOR) / (H - HOR);
+    const len = lerp(10, 70, dd) * R(.5, 1.5) * (.6 + near * .6), w = lerp(1.6, 6, dd) * R(.6, 1.2);
+    const c = mixc(hx(pick(cols)), hx('#f5e2bf'), R(0, .35) * (1 - near));
+    pastel(g, [[x, y], [x + len * .5, y + R(-.6, .6)], [x + len, y + R(-.6, .6)]], w, c, (.35 + .55 * near) * R(.6, 1), { strands: Math.max(2, Math.round(w / 2)), taper: .5 });
+  }
+}, { mask: 'med' }));
+// 色鉛筆の細い糸：橋の足元から、手前の海へゆっくりほどけていく
+T(() => pass(g => {
+  for (let i = 0; i < 60; i++){
+    const b = pick(PAST); let x = b[0] + R(-20, 20), y = b[1] + R(2, 12), a = R(.15, 1.2) * (rnd() < .5 ? 1 : -1) + Math.PI / 2;
+    const pts = [[x, y]]; const L = R(120, 520);
+    for (let k = 0; k < 18; k++){ a += R(-.25, .25); x += Math.cos(a) * L / 18 * 1.6; y += Math.abs(Math.sin(a)) * L / 18 * .45; pts.push([x, y]); }
+    pencilPath(g, pts, hx(rnd() < .5 ? '#e8812f' : '#2f9a58'), R(.25, .55), R(.9, 1.6));
+  }
+}, { mask: 'med' }));
+
 // ================================================================ 8. 橋と電車（奥から手前へ）
 let trainSeed = 0;
 function drawStructure(g){
@@ -973,6 +1000,16 @@ function drawStructure(g){
 T(() => { trainSeed = seed; pass(drawStructure, { mask: 'full' }); });
 T(() => { const after = seed; seed = trainSeed; pass(drawStructure, { mask: 'med', alpha: .35 }); seed = after; });
 T(() => pass(drawWires, { mask: 'med' }));
+// 通ってきた線路の上に、毎日だれかを運んだ時間がうすく積もっている（あたたかい光の擦れ）
+T(() => pass(g => {
+  for (let sp = -380; sp < -1; sp += .8){
+    const d = depthAt(sp); if (d < 10) continue;
+    if (rnd() < .5) continue;
+    const o = R(-.45, .45), p1 = TP(sp, o, .1), p2 = TP(sp + R(1.5, 4), o + R(-.1, .1), .1);
+    const k = 1 - clamp(-sp / 380, 0, 1);
+    pastel(g, [p1, p2], Math.max(1.2, lwAt(d, .12)), mixc(hx('#f6c98c'), hx('#fff0d4'), R(0, 1)), (.25 + .4 * k) * R(.5, 1), { strands: 2, taper: .5 });
+  }
+}, { mask: 'light' }));
 // 車体の側面に、ステンレスの継ぎ目と映り込みを鉛筆で重ねる
 T(() => pass(g => {
   for (let c = 1; c <= 15; c++){ const car = CARS[c], G = carGeom(car), d = G.depth; if (d > 400) continue; const x0 = G.at(10, 0, 2)[0];
