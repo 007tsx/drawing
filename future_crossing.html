@@ -965,7 +965,7 @@ T(() => pass(g => {
 const PAST = []; for (let sp = -380; sp <= 6; sp += 3){ const b = TP(sp, 0, -RAILH * .55); if (b[2] > 8 && b[0] > -60 && b[0] < W && b[1] < H + 40) PAST.push(b); }
 T(() => pass(g => {
   const cols = ['#e8812f', '#ef9a4a', '#f2b170', '#2f9a58', '#4aa86c', '#8fbf7a', '#d9a14e'];
-  for (let i = 0; i < 5200; i++){
+  for (let i = 0; i < 2600; i++){
     const b = pick(PAST);
     const r = Math.pow(rnd(), 1.35) * 1100, a = R(.05, Math.PI * .85);  // 橋の足元から手前の海へ広がる
     let x = b[0] + Math.cos(a) * r * 1.5, y = b[1] + Math.sin(a) * r * .5 + R(-6, 6);
@@ -974,6 +974,29 @@ T(() => pass(g => {
     const len = lerp(10, 70, dd) * R(.5, 1.5) * (.6 + near * .6), w = lerp(1.6, 6, dd) * R(.6, 1.2);
     const c = mixc(hx(pick(cols)), hx('#f5e2bf'), R(0, .35) * (1 - near));
     pastel(g, [[x, y], [x + len * .5, y + R(-.6, .6)], [x + len, y + R(-.6, .6)]], w, c, (.35 + .55 * near) * R(.6, 1), { strands: Math.max(2, Math.round(w / 2)), taper: .5 });
+  }
+}, { mask: 'med' }));
+// 波紋：電車が通り過ぎたところから、色の輪が海へひろがっていく。古い輪ほど大きく、淡く、それでも消えない
+T(() => pass(g => {
+  const FRONT = CARS[1].s1;                         // 先頭が今いるところ
+  for (let sc = FRONT - 6; sc > -380; sc -= 20.6){
+    const age = FRONT - sc, t = trk(sc);
+    const cx = t.x, cz = t.z;
+    for (let ring = 0; ring < 4; ring++){
+      const r = 5 + age * .32 - ring * 4.5; if (r < 3) continue;
+      const fade = clamp(1 - age / 700, .4, 1);
+      const col = hx(ring % 2 ? '#2f9a58' : '#e8812f');
+      let seg = [];
+      const flush = () => { if (seg.length > 2){ const d = seg[0][2], lw = Math.max(2.2, Math.min(9, lwAt(d, .9))); const c = mixc(col, hx('#f6e3c0'), (1 - fade) * .35);
+        pastel(g, seg.map(q => [q[0], q[1]]), lw, c, (.42 + .38 * fade), { strands: Math.max(2, Math.round(lw / 1.6)), taper: .15, lw: [1.2, 2.6] }); pencilPath(g, seg.map(q => [q[0], q[1] - lw * .3]), mixc(c, hx('#fff1d8'), .5), .45 * fade, 1); } seg = []; };
+      const n = Math.round(clamp(r * .9, 60, 420));
+      for (let i = 0; i <= n; i++){
+        const a = i / n * 6.283, q = P3(cx + Math.cos(a) * r, -RAILH, cz + Math.sin(a) * r);
+        if (q[2] < 6 || q[1] < HOR + 4 || q[0] < -80 || q[0] > W + 80 || q[1] > H + 80 || rnd() < .025){ flush(); continue; }
+        seg.push(q); if (seg.length > 24) { flush(); seg = [q]; }
+      }
+      flush();
+    }
   }
 }, { mask: 'med' }));
 // 色鉛筆の細い糸：橋の足元から、手前の海へゆっくりほどけていく
