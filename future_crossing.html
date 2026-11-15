@@ -1040,21 +1040,24 @@ function drawStructure(g){
 T(() => { trainSeed = seed; pass(drawStructure, { mask: 'full' }); });
 T(() => { const after = seed; seed = trainSeed; pass(drawStructure, { mask: 'med', alpha: .35 }); seed = after; });
 T(() => pass(drawWires, { mask: 'med' }));
-// 尾灯の映り込み：橋桁の下から、海面に長く揺れて映る
+// 尾灯の光が、いま通ってきた線路に落ちる：レールの頭が赤くひかり、枕木と砂利がうっすら赤く染まる
 T(() => pass(g => {
-  const tl = tailPts(false);
-  for (const lt of tl){
-    const gb = TP(-1, camSide(0) * DECK_HW, GIRD_B), m = [lt[0] + (lt[0] - gb[0]) * .15, 0]; let y = gb[1] + 14 + (lt[0] - tl[0][0]) * .2;
-    for (let k = 0; k < 70; k++){
-      const t = k / 70, dd = (y - HOR) / (H - HOR);
-      const len = lerp(4, 26, t) * R(.5, 1.4) * (1 + dd), x = m[0] + R(-3, 3) * (1 + t * 4) + Math.sin(k * .9) * t * 8;
-      const c = mixc(hx('#e0452f'), hx('#f2915c'), R(0, .6) * t);
-      pastel(g, [[x - len / 2, y], [x + len / 2, y + R(-.5, .5)]], lerp(2.4, 4, t), c, (.95 - .65 * t) * R(.7, 1), { strands: 2, taper: .4 });
-      y += lerp(2.5, 7, t) * R(.7, 1.3);
-      if (y > H) break;
+  const tail = CARS[15].s0;
+  for (let k = 0; k < 140; k++){
+    const back = Math.pow(rnd(), 1.6) * 26, sp = tail - back - .3, fall = Math.exp(-back / 7);
+    if (depthAt(sp) < 9) continue;
+    // 砂利と枕木に落ちるやわらかい赤
+    const o = R(-1.1, 1.1), p1 = TP(sp, o, .07), p2 = TP(sp - R(.3, 1.2), o + R(-.2, .2), .07);
+    pastel(g, [p1, p2], Math.max(1.4, lwAt(p1[2], .18)), mixc(hx('#d8553a'), hx('#f0a07a'), R(0, .5)), .45 * fall, { strands: 2, taper: .5 });
+  }
+  for (const o of [-.533, .533]){   // レールの頭のきらめき（近いほど強い）
+    for (let back = .3; back < 30; back += R(.6, 2.2)){
+      const sp = tail - back, f = Math.exp(-back / 9); if (depthAt(sp) < 9) continue;
+      const p1 = TP(sp, o, .18), p2 = TP(sp - R(.5, 1.6), o, .18);
+      pencil(g, p1[0], p1[1], p2[0], p2[1], mixc(hx('#ff7a52'), hx('#ffd0b0'), f * .4), .85 * f, Math.max(1, lwAt(p1[2], .07)));
     }
   }
-}, { mask: 'heavy' }));
+}, { mask: 'med' }));
 // 尾灯そのもの：この絵でただ二つの、あたたかい赤。まわりの空気にうすく赤がにじむ（パステルを指でぼかした程度）
 T(() => pass(g => {
   for (const q of tailPts(false)){
