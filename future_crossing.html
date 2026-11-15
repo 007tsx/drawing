@@ -1083,23 +1083,23 @@ function tailPts(mir){ const G = carGeom(CARS[15]); return [-1.08, 1.08].map(w =
 // 沖に立つ、とほうもなく大きな道しるべ。上へ、下へ、電車へ、過去へ、まだ描かれていない白へ。
 // 板はどれも白紙のまま。書きかけては消した鉛筆の跡だけが残っている。
 // 「やりたいことってなんだろう」「なんで生きてるんだろう」— 方向はいくらでもあるのに、どれにも答えは書いていない。
-const SIGN = { x: -250, z: 1430, top: 380 };
+const SIGN = { x: -250, z: 1430, top: 258 };
 const SARMS = [
-  { h: 350, th: 2.2, tilt: .55, L: 120, col: '#a9c3a6' },  // 空の上のほうへ
-  { h: 318, th: 5.6, tilt: .05, L: 140, col: '#e8c96a' },
-  { h: 285, th: .55, tilt: -.08, L: 130, col: '#d98d8d' },   // 電車の方へ
-  { h: 250, th: 3.25, tilt: .12, L: 135, col: '#7fa9a2' },
-  { h: 215, th: 4.7, tilt: -.5, L: 115, col: '#f0b07a' },   // 海の底のほうへ
-  { h: 180, th: .3, tilt: .2, L: 150, col: '#b9c98f' },    // まだ描かれていない白の方へ
-  { h: 145, th: 3.0, tilt: -.15, L: 110, col: '#c9a0b4' },
-  { h: 110, th: 2.9, tilt: .32, L: 125, col: '#e6a35c' },
-  { h: 78, th: .2, tilt: -.25, L: 100, col: '#9fb7c9' },
+  { h: 238, th: 2.2, tilt: .55, L: 82, col: '#a9c3a6' },  // 空の上のほうへ
+  { h: 216, th: 5.6, tilt: .05, L: 95, col: '#e8c96a' },
+  { h: 194, th: .55, tilt: -.08, L: 88, col: '#d98d8d' },   // 電車の方へ
+  { h: 170, th: 3.25, tilt: .12, L: 92, col: '#7fa9a2' },
+  { h: 146, th: 4.7, tilt: -.5, L: 78, col: '#f0b07a' },   // 海の底のほうへ
+  { h: 122, th: .3, tilt: .2, L: 102, col: '#b9c98f' },    // まだ描かれていない白の方へ
+  { h: 99, th: 3.0, tilt: -.15, L: 75, col: '#c9a0b4' },
+  { h: 75, th: 2.9, tilt: .32, L: 85, col: '#e6a35c' },
+  { h: 53, th: .2, tilt: -.25, L: 68, col: '#9fb7c9' },
 ];
 T(() => pass(g => {
   // 縦の線を画面に対してまっすぐ立てる（広角の遠近で手前に倒れて見えるのを直す）
   const baseX = P3(SIGN.x, -RAILH, SIGN.z)[0];
   const PV = (x, y, z) => { const p = P3(x, y, z), c = P3(SIGN.x, y, SIGN.z); return [p[0] + baseX - c[0], p[1], p[2]]; };
-  const W0 = 16, W1 = 10;
+  const W0 = 11, W1 = 7;
   let post;
   const C0 = [SIGN.x, 0, SIGN.z], base = PV(SIGN.x, -RAILH, SIGN.z), d = base[2];
   const F = (h, a = 1) => fogc(hx(h), d * a, base[0]);
@@ -1116,24 +1116,24 @@ T(() => pass(g => {
   arms.sort((p, q) => q.depth - p.depth);
   const postDepth = PV(SIGN.x, 200, SIGN.z)[2];
   const drawArms = behind => { for (const ar of arms){ if ((ar.depth > postDepth) !== behind) continue;
-    const { A, dir, up, at, mid } = ar, hh = 13;
+    const { A, dir, up, at, mid } = ar, hh = 9;
     const n = [dir[1] * up[2] - dir[2] * up[1], dir[2] * up[0] - dir[0] * up[2], dir[0] * up[1] - dir[1] * up[0]];
     const facing = Math.abs(n[0] * toCam(mid)[0] + n[1] * toCam(mid)[1] + n[2] * toCam(mid)[2]);
     const sun = Math.abs(n[0] * SUNV[0] + n[1] * SUNV[1] + n[2] * SUNV[2]);
-    const outline = [at(-8, hh), at(A.L - 18, hh), at(A.L, 0), at(A.L - 18, -hh), at(-8, -hh)];
+    const outline = [at(-6, hh), at(A.L - 12, hh), at(A.L, 0), at(A.L - 12, -hh), at(-6, -hh)];
     const shade = mixc(hx('#a8977f'), hx('#f4e7cc'), clamp(.3 + sun * .9 + facing * .2, 0, 1));
     poly(g, outline, fogc(shade, d, base[0]));
     // 縁どり：まだ選ばれていない色
-    const rim = [at(-8, hh * .8), at(A.L - 19, hh * .8), at(A.L - 3.5, 0), at(A.L - 19, -hh * .8), at(-8, -hh * .8)];
+    const rim = [at(-6, hh * .8), at(A.L - 12.8, hh * .8), at(A.L - 2.4, 0), at(A.L - 12.8, -hh * .8), at(-6, -hh * .8)];
     pencilPath(g, rim.concat([rim[0]]), fogc(hx(A.col), d, base[0]), .85, 3.6);
     pencilPath(g, rim.concat([rim[0]]).map(q => [q[0] + 1.2, q[1] + .8]), fogc(hx(A.col), d, base[0]), .5, 2);
     pencilPath(g, outline.concat([outline[0]]), F('#4a3a33'), .55, 1.2);
     // 書きかけて、消した跡
     if (facing > .15){
-      for (let k = 0; k < 4; k++){ const t0 = R(6, A.L - 50), vy = R(-hh * .45, hh * .45), pts = [];
+      for (let k = 0; k < 4; k++){ const t0 = R(4, A.L - 34), vy = R(-hh * .45, hh * .45), pts = [];
         for (let j = 0; j < 12; j++) pts.push(at(t0 + j * R(2, 3.6), vy + R(-2.6, 2.6)));
         pencilPath(g, pts, F('#6a5c52'), R(.18, .32), 1); }
-      for (let k = 0; k < 2; k++){ const t0 = R(6, A.L - 50), p1 = at(t0, R(-3, 3)), p2 = at(t0 + R(20, 40), R(-3, 3));
+      for (let k = 0; k < 2; k++){ const t0 = R(4, A.L - 34), p1 = at(t0, R(-3, 3)), p2 = at(t0 + R(20, 40), R(-3, 3));
         pastel(g, [p1, p2], R(9, 16), fogc(shade, d, base[0]), .7, { strands: 3, taper: .5 }); }
     }
     // 柱に巻きつく留め金（板と柱がつながっていることを示す）
@@ -1157,7 +1157,7 @@ T(() => pass(g => {
   // 木目のような縦の筋
   for (let k = 0; k < 30; k++){ const sx = R(-1, 1), y0 = R(-RAILH, SIGN.top - 40), y1 = y0 + R(20, 90); const p1 = post(sx, -1, y0), p2 = post(sx, -1, Math.min(y1, SIGN.top)); pencil(g, p1[0], p1[1], p2[0], p2[1], F(rnd() < .5 ? '#6b5448' : '#c9a98a'), R(.2, .4), 1); }
   // 頂の小さな笠
-  const capY = SIGN.top - .5, cap = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => PV(SIGN.x + a * 6.2, capY, SIGN.z + b * 6.2)), apex = PV(SIGN.x, capY + 18, SIGN.z);
+  const capY = SIGN.top - .5, cap = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => PV(SIGN.x + a * 4.4, capY, SIGN.z + b * 4.4)), apex = PV(SIGN.x, capY + 13, SIGN.z);
   poly(g, [cap[0], cap[1], apex], F('#8a6c5c')); poly(g, [cap[1], cap[2], apex], F('#5f4b42'));
   drawArms(false);
   // 足もとの朝もや
