@@ -616,7 +616,7 @@ function carFeatures(car){
       for (const c of [2.45, 7.43, 12.47, 16.17]) f.doors.push(span(c - .7, c + .7).concat([1.08, 2.92, 2]));
       f.wins.push(span(3.91, 5.9).concat([1.95, 2.82]), span(8.92, 10.98).concat([1.95, 2.82]), span(13.97, 14.68).concat([1.95, 2.82]), span(.21, .95).concat([1.95, 2.82]));
       const cd = span(17.88, 18.6); f.crew = [cd[0], cd[1], 1.08, 2.95];
-      f.cabWin = span(18.82, 19.52).concat([1.98, 2.82]);
+      f.cabWin = span(18.82, 19.52).concat([2.37, 2.86]);   // 運転台横の窓は小さく、高い位置（写真01）
     }
     let last = 0; const stops = f.doors.map(d => [d[0], d[1]]).concat(f.crew ? [[f.crew[0], f.crew[1]]] : []).sort((x, y) => x[0] - y[0]);
     for (const [p, q] of stops){ if (p > last) f.bands.push([last, p]); last = q; }
@@ -864,13 +864,15 @@ function drawNose(g, G, car, end, tail, d, x0){
     if (tail){ const q = S(sd * 1.08, 1.28, -.01); g.fillStyle = css(hx('#ff9b7a'), .9); g.beginPath(); g.ellipse(q[0], q[1], lwAt(d, .06), lwAt(d, .035), 0, 0, 6.283); g.fill(); } }
   // 床下の暗がりと、前へ張り出した白いスカート、その前の連結器
   const SK = (w, v, f) => G.at(end + dir * f, w, v);
-  poly(g, [SK(-1.2, 1.02, .1), SK(1.2, 1.02, .1), SK(1.2, .9, .1), SK(-1.2, .9, .1)], C('#2b2826'));      // 床下の暗がり
+      // 床下の暗がり
   poly(g, [SK(-.3, 1.0, -.1), SK(.3, 1.0, -.1), SK(.3, .74, -.1), SK(-.3, .74, -.1)], C('#3a3633'));             // 連結器
   // スカート：上は広く、下の両角を大きく斜めに落とした台形
-  poly(g, [SK(-1.3, .95, -.02), SK(1.3, .95, -.02), SK(1.3, .62, -.02), SK(1.0, .42, -.02), SK(-1.0, .42, -.02), SK(-1.3, .62, -.02)], C('#d9d3c8'));
-  poly(g, [SK(-1.3, .62, -.02), SK(1.3, .62, -.02), SK(1.0, .42, -.02), SK(-1.0, .42, -.02)], C('#bdb6aa'));
-  poly(g, [SK(-.36, .95, -.03), SK(.36, .95, -.03), SK(.3, .72, -.03), SK(-.3, .72, -.03)], C('#2f2c2a'));              // 連結器の前の切り欠き
-  pencilPath(g, [SK(-1.3, .96, -.02), SK(1.3, .96, -.02)], C('#2b2725'), .55, lwAt(d, .03));
+  // スカートの側面：車体の裾から後ろへ回り込み、車体に取り付いている
+  for (const sd of [-1, 1]) poly(g, [SK(sd * 1.3, 1.0, -.02), SK(sd * 1.3, 1.0, .75), SK(sd * 1.3, .7, .75), SK(sd * 1.3, .62, -.02), SK(sd * 1.0, .42, -.02)], C('#9d968c'));
+  poly(g, [SK(-1.3, 1.0, -.02), SK(1.3, 1.0, -.02), SK(1.3, .62, -.02), SK(1.0, .42, -.02), SK(-1.0, .42, -.02), SK(-1.3, .62, -.02)], C('#cdc6ba'));
+  poly(g, [SK(-1.3, .62, -.02), SK(1.3, .62, -.02), SK(1.0, .42, -.02), SK(-1.0, .42, -.02)], C('#aea79b'));
+  poly(g, [SK(-.34, .9, -.03), SK(.34, .9, -.03), SK(.28, .7, -.03), SK(-.28, .7, -.03)], C('#2f2c2a'));              // 連結器の前の切り欠き
+  pencilPath(g, [SK(-1.3, 1.0, -.02), SK(1.3, 1.0, -.02)], C('#5a534d'), .45, lwAt(d, .025));
   // 輪郭（鉛筆）：顔の縁と、黒い面の縁
   const edge = []; for (let i = 0; i < VS.length; i++) edge.push(S(secW(VS[i]) * .999, VS[i])); for (let i = VS.length - 1; i >= 0; i--) edge.push(S(-secW(VS[i]) * .999, VS[i]));
   pencilPath(g, edge, C('#2b2725'), .45, lwAt(d, .045));
