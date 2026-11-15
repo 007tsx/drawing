@@ -1021,6 +1021,11 @@ T(() => pass(g => {
   }
 }, { mask: 'med' }));
 
+// ================================================================ 7c. 尾灯の映り込み — 「じゃ、またあした」
+// 最後尾の二つの赤い灯が、海面に長く揺れて映る。こちらを振り返って手を振るように。
+function tailPts(mir){ const G = carGeom(CARS[15]); return [-1.09, 1.09].map(w => { const q = G.w3(-.02, w, 1.405); return (mir ? PM : P3)(q[0], q[1], q[2]); }); }
+
+
 // ================================================================ 8. 橋と電車（奥から手前へ）
 let trainSeed = 0;
 function drawStructure(g){
@@ -1035,6 +1040,30 @@ function drawStructure(g){
 T(() => { trainSeed = seed; pass(drawStructure, { mask: 'full' }); });
 T(() => { const after = seed; seed = trainSeed; pass(drawStructure, { mask: 'med', alpha: .35 }); seed = after; });
 T(() => pass(drawWires, { mask: 'med' }));
+// 尾灯の映り込み：橋桁の下から、海面に長く揺れて映る
+T(() => pass(g => {
+  const tl = tailPts(false);
+  for (const lt of tl){
+    const gb = TP(-1, camSide(0) * DECK_HW, GIRD_B), m = [lt[0] + (lt[0] - gb[0]) * .15, 0]; let y = gb[1] + 14 + (lt[0] - tl[0][0]) * .2;
+    for (let k = 0; k < 70; k++){
+      const t = k / 70, dd = (y - HOR) / (H - HOR);
+      const len = lerp(4, 26, t) * R(.5, 1.4) * (1 + dd), x = m[0] + R(-3, 3) * (1 + t * 4) + Math.sin(k * .9) * t * 8;
+      const c = mixc(hx('#e0452f'), hx('#f2915c'), R(0, .6) * t);
+      pastel(g, [[x - len / 2, y], [x + len / 2, y + R(-.5, .5)]], lerp(2.4, 4, t), c, (.95 - .65 * t) * R(.7, 1), { strands: 2, taper: .4 });
+      y += lerp(2.5, 7, t) * R(.7, 1.3);
+      if (y > H) break;
+    }
+  }
+}, { mask: 'heavy' }));
+// 尾灯そのもの：この絵でただ二つの、あたたかい赤。まわりの空気にうすく赤がにじむ（パステルを指でぼかした程度）
+T(() => pass(g => {
+  for (const q of tailPts(false)){
+    for (let k = 0; k < 26; k++){ const a = R(0, 6.283), r = R(3, 16);
+      pastel(g, [[q[0] + Math.cos(a) * r, q[1] + Math.sin(a) * r * .6], [q[0] + Math.cos(a) * (r + R(3, 8)), q[1] + Math.sin(a) * (r + R(3, 8)) * .6]], R(1.5, 3), mixc(hx('#e8603e'), hx('#f4b08a'), r / 16), .45 * (1 - r / 19), { strands: 2, taper: .4 }); }
+    g.fillStyle = css(hx('#d8341f'), .95); g.beginPath(); g.ellipse(q[0], q[1], 4.6, 3, 0, 0, 6.283); g.fill();
+    g.fillStyle = css(hx('#ffb08a'), .9); g.beginPath(); g.ellipse(q[0] - .4, q[1] - .3, 1.3, .9, 0, 0, 6.283); g.fill();
+  }
+}, { mask: null }));
 // 通ってきた線路の上に、毎日だれかを運んだ時間がうすく積もっている（あたたかい光の擦れ）
 T(() => pass(g => {
   for (let sp = -380; sp < -1; sp += .8){
