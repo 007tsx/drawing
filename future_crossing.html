@@ -1087,36 +1087,23 @@ const SIGN = { x: -250, z: 1430, top: 380 };
 const SARMS = [
   { h: 350, th: 2.2, tilt: .55, L: 120, col: '#a9c3a6' },  // 空の上のほうへ
   { h: 318, th: 5.6, tilt: .05, L: 140, col: '#e8c96a' },
-  { h: 285, th: .9, tilt: -.08, L: 130, col: '#d98d8d' },   // 電車の方へ
-  { h: 250, th: 3.6, tilt: .12, L: 135, col: '#7fa9a2' },
+  { h: 285, th: .55, tilt: -.08, L: 130, col: '#d98d8d' },   // 電車の方へ
+  { h: 250, th: 3.25, tilt: .12, L: 135, col: '#7fa9a2' },
   { h: 215, th: 4.7, tilt: -.5, L: 115, col: '#f0b07a' },   // 海の底のほうへ
-  { h: 180, th: 1.6, tilt: .2, L: 150, col: '#b9c98f' },    // まだ描かれていない白の方へ
-  { h: 145, th: 6.1, tilt: -.15, L: 110, col: '#c9a0b4' },
+  { h: 180, th: .3, tilt: .2, L: 150, col: '#b9c98f' },    // まだ描かれていない白の方へ
+  { h: 145, th: 3.0, tilt: -.15, L: 110, col: '#c9a0b4' },
   { h: 110, th: 2.9, tilt: .32, L: 125, col: '#e6a35c' },
   { h: 78, th: .2, tilt: -.25, L: 100, col: '#9fb7c9' },
 ];
 T(() => pass(g => {
+  const W0 = 16, W1 = 10;
+  let post;
   const C0 = [SIGN.x, 0, SIGN.z], base = P3(SIGN.x, -RAILH, SIGN.z), d = base[2];
   const F = (h, a = 1) => fogc(hx(h), d * a, base[0]);
   const toCam = v => { const q = [-v[0], CAM.ch - v[1], -v[2]], L = Math.hypot(...q); return q.map(x => x / L); };
   // 水面の映り（縦に長く揺れる暗い影）
   for (let k = 0; k < 40; k++){ const y = base[1] + 2 + k * R(2.5, 5), x = base[0] + R(-6, 6) * (1 + k * .08), len = R(8, 22);
     if (y > H) break; pastel(g, [[x - len / 2, y], [x + len / 2, y]], 3, mixc(F('#4a3b36'), hx('#2a3434'), k / 40), .55 - k * .011, { strands: 2, taper: .4 }); }
-  // 柱：すこし先細りの四角柱
-  const W0 = 16, W1 = 10, post = (sx, sz, y) => { const w = lerp(W0, W1, (y + RAILH) / (SIGN.top + RAILH)); return P3(SIGN.x + sx * w / 2, y, SIGN.z + sz * w / 2); };
-  const YS = []; for (let i = 0; i <= 24; i++) YS.push(lerp(-RAILH, SIGN.top, i / 24));
-  const faceA = YS.map(y => post(-1, -1, y)).concat(YS.slice().reverse().map(y => post(1, -1, y)));
-  const faceB = YS.map(y => post(1, -1, y)).concat(YS.slice().reverse().map(y => post(1, 1, y)));
-  poly(g, faceB, F('#6e5a50'));
-  poly(g, faceA, F('#a0826c'));
-  pencilPath(g, YS.map(y => post(1, -1, y)), F('#f3cf9a'), .6, 1.4);
-  pencilPath(g, YS.map(y => post(-1, -1, y)), F('#3e302b'), .55, 1.2);
-  pencilPath(g, YS.map(y => post(1, 1, y)), F('#3e302b'), .45, 1.1);
-  // 木目のような縦の筋
-  for (let k = 0; k < 30; k++){ const sx = R(-1, 1), y0 = R(-RAILH, SIGN.top - 40), y1 = y0 + R(20, 90); const p1 = post(sx, -1, y0), p2 = post(sx, -1, Math.min(y1, SIGN.top)); pencil(g, p1[0], p1[1], p2[0], p2[1], F(rnd() < .5 ? '#6b5448' : '#c9a98a'), R(.2, .4), 1); }
-  // 頂の小さな笠
-  const capY = SIGN.top + 4, cap = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => P3(SIGN.x + a * 8, capY, SIGN.z + b * 8)), apex = P3(SIGN.x, capY + 22, SIGN.z);
-  poly(g, [cap[0], cap[1], apex], F('#8a6c5c')); poly(g, [cap[1], cap[2], apex], F('#5f4b42'));
   // 道しるべの板
   const arms = SARMS.map(A => { const ct = Math.cos(A.th), st = Math.sin(A.th), cl = Math.cos(A.tilt), sl = Math.sin(A.tilt);
     const dir = [ct * cl, sl, st * cl], up = [-ct * sl, cl, -st * sl];
@@ -1124,7 +1111,8 @@ T(() => pass(g => {
     const mid = [SIGN.x + dir[0] * A.L * .5, A.h + dir[1] * A.L * .5, SIGN.z + dir[2] * A.L * .5];
     return { A, dir, up, at, depth: P3(...mid)[2], mid }; });
   arms.sort((p, q) => q.depth - p.depth);
-  for (const ar of arms){
+  const postDepth = P3(SIGN.x, 200, SIGN.z)[2];
+  const drawArms = behind => { for (const ar of arms){ if ((ar.depth > postDepth) !== behind) continue;
     const { A, dir, up, at, mid } = ar, hh = 13;
     const n = [dir[1] * up[2] - dir[2] * up[1], dir[2] * up[0] - dir[0] * up[2], dir[0] * up[1] - dir[1] * up[0]];
     const facing = Math.abs(n[0] * toCam(mid)[0] + n[1] * toCam(mid)[1] + n[2] * toCam(mid)[2]);
@@ -1145,9 +1133,30 @@ T(() => pass(g => {
       for (let k = 0; k < 2; k++){ const t0 = R(6, A.L - 50), p1 = at(t0, R(-3, 3)), p2 = at(t0 + R(20, 40), R(-3, 3));
         pastel(g, [p1, p2], R(9, 16), fogc(shade, d, base[0]), .7, { strands: 3, taper: .5 }); }
     }
-    // 板の付け根の金具
-    const b0 = at(-2, 0); g.fillStyle = css(F('#3e302b'), .8); g.beginPath(); g.ellipse(b0[0], b0[1], 1.6, 1.6, 0, 0, 6.283); g.fill();
+    // 柱に巻きつく留め金（板と柱がつながっていることを示す）
+    for (const dv of [hh * .55, -hh * .55]){ const yy = A.h + dv, w = lerp(W0, W1, (yy + RAILH) / (SIGN.top + RAILH)) / 2 + .8;
+      const band = [[-1, -1], [1, -1], [1, 1]].map(([a, b]) => P3(SIGN.x + a * w, yy, SIGN.z + b * w));
+      pencilPath(g, band, F('#2e2420'), .85, 2.6); }
+    const b0 = at(-2, 0); g.fillStyle = css(F('#3e302b'), .9); g.beginPath(); g.ellipse(b0[0], b0[1], 2.4, 2.4, 0, 0, 6.283); g.fill();
   }
+  };
+  drawArms(true);
+  // 柱：すこし先細りの四角柱
+  post = (sx, sz, y) => { const w = lerp(W0, W1, (y + RAILH) / (SIGN.top + RAILH)); return P3(SIGN.x + sx * w / 2, y, SIGN.z + sz * w / 2); };
+  const YS = []; for (let i = 0; i <= 24; i++) YS.push(lerp(-RAILH, SIGN.top, i / 24));
+  const faceA = YS.map(y => post(-1, -1, y)).concat(YS.slice().reverse().map(y => post(1, -1, y)));
+  const faceB = YS.map(y => post(1, -1, y)).concat(YS.slice().reverse().map(y => post(1, 1, y)));
+  poly(g, faceB, F('#6e5a50'));
+  poly(g, faceA, F('#a0826c'));
+  pencilPath(g, YS.map(y => post(1, -1, y)), F('#f3cf9a'), .6, 1.4);
+  pencilPath(g, YS.map(y => post(-1, -1, y)), F('#3e302b'), .55, 1.2);
+  pencilPath(g, YS.map(y => post(1, 1, y)), F('#3e302b'), .45, 1.1);
+  // 木目のような縦の筋
+  for (let k = 0; k < 30; k++){ const sx = R(-1, 1), y0 = R(-RAILH, SIGN.top - 40), y1 = y0 + R(20, 90); const p1 = post(sx, -1, y0), p2 = post(sx, -1, Math.min(y1, SIGN.top)); pencil(g, p1[0], p1[1], p2[0], p2[1], F(rnd() < .5 ? '#6b5448' : '#c9a98a'), R(.2, .4), 1); }
+  // 頂の小さな笠
+  const capY = SIGN.top + 4, cap = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => P3(SIGN.x + a * 8, capY, SIGN.z + b * 8)), apex = P3(SIGN.x, capY + 22, SIGN.z);
+  poly(g, [cap[0], cap[1], apex], F('#8a6c5c')); poly(g, [cap[1], cap[2], apex], F('#5f4b42'));
+  drawArms(false);
   // 足もとの朝もや
   for (let k = 0; k < 40; k++){ const x = base[0] + R(-70, 70), y = base[1] - R(0, 40);
     pastel(g, pathPts(x - 30, y, R(-.02, .02), R(40, 120), 0, 4), R(3, 7), mixc(skyAt(x, Math.min(y, HOR - 2)), hx('#f6e2c0'), .4), .45, { strands: 2 }); }
