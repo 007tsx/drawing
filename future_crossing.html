@@ -592,14 +592,14 @@ function bodyColor(v, car, d, x){
 }
 function sideQuad(G, u0, u1, v0, v1, col, a = 1, g){ poly(g, [G.at(u0, HW, v1), G.at(u1, HW, v1), G.at(u1, HW, v0), G.at(u0, HW, v0)], col, a); }
 function roundWin(G, u0, u1, v0, v1, col, g, a = 1){
-  const r = Math.min(u1 - u0, v1 - v0) * .18, pts = [];
+  const r = Math.min(u1 - u0, v1 - v0) * .2, pts = [];
   const corner = (cu, cv, a0) => { for (let i = 0; i <= 3; i++){ const a = a0 + i / 3 * Math.PI / 2; pts.push(G.at(cu + Math.cos(a) * r, HW, cv + Math.sin(a) * r)); } };
   corner(u1 - r, v1 - r, 0); corner(u0 + r, v1 - r, Math.PI / 2); corner(u0 + r, v0 + r, Math.PI); corner(u1 - r, v0 + r, Math.PI * 1.5);
   poly(g, pts, col, a);
   return pts;
 }
 // 車体の構成（普通車）
-const DOORS = [2.77, 7.59, 12.41, 17.23], BIGWIN = [5.18, 10, 14.82];
+const DOORS = [2.45, 7.43, 12.57, 17.55], BIGWIN = [4.94, 10.0, 15.06];
 function carFeatures(car){
   const f = { doors: [], wins: [], crew: null, bands: [], topBand: [], deckWins: [] };
   const cabAt = car.cab === 'F' ? 20 : car.cab === 'R' ? 0 : null;
@@ -607,31 +607,32 @@ function carFeatures(car){
   if (car.type === 'std'){
     const span = (p, q) => [M(p), M(q)].sort((x, y) => x - y);
     if (cabAt === null){
-      for (const c of DOORS) f.doors.push([c - .65, c + .65, 1.08, 3.0, 2]);
-      for (const c of BIGWIN) f.wins.push([c - 1.0, c + 1.0, 2.0, 2.95]);
-      f.wins.push([.6, 1.3, 2.0, 2.95], [18.7, 19.4, 2.0, 2.95]);
+      for (const c of DOORS) f.doors.push([c - .7, c + .7, 1.08, 2.92, 2]);
+      for (const c of BIGWIN) f.wins.push([c - 1.0, c + 1.0, 1.95, 2.82]);
+      f.wins.push([.21, .95, 1.95, 2.82], [19.05, 19.79, 1.95, 2.82]);
     } else {
       // 先頭車（写真01を遠近補正して実測）：ドアは均等ではなく、3番目と4番目の間だけ狭い（約3.7m、小窓ひとつ）
-      for (const c of [2.3, 7.02, 12.45, 16.17]) f.doors.push(span(c - .65, c + .65).concat([1.08, 3.0, 2]));
-      f.wins.push(span(3.8, 5.85).concat([2.0, 2.95]), span(8.9, 10.95).concat([2.0, 2.95]), span(14.4, 15.15).concat([2.0, 2.95]), span(.25, .95).concat([2.0, 2.95]));
-      const cd = span(17.82, 18.45); f.crew = [cd[0], cd[1], 1.08, 3.02];
-      f.cabWin = span(18.94, 19.65).concat([2.02, 2.95]);
+      // 写真01を画素単位で測り、遠近を補正した値（4つのドア幅がそろうように射影を合わせた）
+      for (const c of [2.45, 7.43, 12.47, 16.17]) f.doors.push(span(c - .7, c + .7).concat([1.08, 2.92, 2]));
+      f.wins.push(span(3.91, 5.9).concat([1.95, 2.82]), span(8.92, 10.98).concat([1.95, 2.82]), span(13.97, 14.68).concat([1.95, 2.82]), span(.21, .95).concat([1.95, 2.82]));
+      const cd = span(17.88, 18.6); f.crew = [cd[0], cd[1], 1.08, 2.95];
+      f.cabWin = span(18.82, 19.52).concat([1.98, 2.82]);
     }
     let last = 0; const stops = f.doors.map(d => [d[0], d[1]]).concat(f.crew ? [[f.crew[0], f.crew[1]]] : []).sort((x, y) => x[0] - y[0]);
     for (const [p, q] of stops){ if (p > last) f.bands.push([last, p]); last = q; }
     if (last < 20) f.bands.push([last, 20]);
-    f.topBand.push([0, 20, 3.06, 3.22]);
+    f.topBand.push([0, 20, 3.03, 3.14]);
     if (f.crew) f.bands.push([f.crew[0], f.crew[1]]);
   } else {
     const U = uo => car.outerFront ? 20 - uo : uo, span = (a, b) => [U(a), U(b)].sort((x, y) => x - y);
-    for (const c of [.9, 2.0, 3.1]) f.wins.push(span(c - .42, c + .42).concat([2.0, 2.95]));
+    for (const c of [.9, 2.0, 3.1]) f.wins.push(span(c - .42, c + .42).concat([1.95, 2.82]));
     f.doors.push(span(4.4, 5.4).concat([1.08, 3.0, 1]));
-    f.wins.push(span(18.6, 19.3).concat([2.0, 2.95]));
+    f.wins.push(span(18.6, 19.3).concat([1.95, 2.82]));
     for (let i = 0; i < 6; i++){ const c = 6.6 + i * 1.95; f.deckWins.push(span(c - .78, c + .78).concat([2.48, 3.42])); }
     for (let i = 0; i < 5; i++){ const c = 7.4 + i * 2.2; f.deckWins.push(span(c - .85, c + .85).concat([.74, 1.46])); }
     f.bands.push(span(0, 4.4), span(5.4, 5.75), span(17.9, 20));
     f.deckBand = span(5.75, 17.9);
-    f.topBand.push(span(0, 4.4).concat([3.06, 3.22]), span(17.9, 20).concat([3.06, 3.22]));
+    f.topBand.push(span(0, 4.4).concat([3.03, 3.14]), span(17.9, 20).concat([3.03, 3.14]));
   }
   f.wins = f.wins.filter(Boolean);
   return f;
@@ -700,10 +701,10 @@ function drawCar(g, car, mir){
     const p1 = at(a, HW, v1), p2 = at(a, HW, v0), p3 = at(b, HW, v1), p4 = at(b, HW, v0);
     pencil(g, p1[0], p1[1], p2[0], p2[1], ink, .6, lw); pencil(g, p3[0], p3[1], p4[0], p4[1], ink, .6, lw);
     if (leaves === 2){ const m = (a + b) / 2, q1 = at(m, HW, v1), q2 = at(m, HW, v0); pencil(g, q1[0], q1[1], q2[0], q2[1], ink, .45, lw * .8);
-      roundWin(G, a + .14, m - .1, 2.05, 2.85, fogc(hx('#b58f76'), d, x0), g); roundWin(G, m + .1, b - .14, 2.05, 2.85, fogc(hx('#b58f76'), d, x0), g); }
-    else roundWin(G, a + .25, b - .25, 2.05, 2.85, fogc(hx('#b58f76'), d, x0), g);
+      roundWin(G, a + .16, m - .1, 2.0, 2.78, fogc(hx('#b58f76'), d, x0), g); roundWin(G, m + .1, b - .16, 2.0, 2.78, fogc(hx('#b58f76'), d, x0), g); }
+    else roundWin(G, a + .25, b - .25, 2.0, 2.78, fogc(hx('#b58f76'), d, x0), g);
   }
-  if (F.crew){ const [a, b, v0, v1] = F.crew; sideQuad(G, a, b, v0, v1, fogc(hx('#2f8a55'), d, x0), 1, g); roundWin(G, a + .1, b - .1, 2.05, 2.85, fogc(hx('#262a2b'), d, x0), g);
+  if (F.crew){ const [a, b, v0, v1] = F.crew; sideQuad(G, a, b, v0, v1, fogc(hx('#2f8a55'), d, x0), 1, g); roundWin(G, a + .1, b - .1, 2.0, 2.78, fogc(hx('#262a2b'), d, x0), g);
     if (F.cabWin){ const [p, q, w0, w1] = F.cabWin; roundWin(G, p, q, w0, w1, fogc(hx('#1f2223'), d, x0), g); }
     const p1 = at(a, HW, v1), p2 = at(a, HW, v0); pencil(g, p1[0], p1[1], p2[0], p2[1], ink, .6, lw); }
   // 帯（上が細いオレンジ、下が太い緑）
@@ -863,13 +864,13 @@ function drawNose(g, G, car, end, tail, d, x0){
     if (tail){ const q = S(sd * 1.08, 1.28, -.01); g.fillStyle = css(hx('#ff9b7a'), .9); g.beginPath(); g.ellipse(q[0], q[1], lwAt(d, .06), lwAt(d, .035), 0, 0, 6.283); g.fill(); } }
   // 床下の暗がりと、前へ張り出した白いスカート、その前の連結器
   const SK = (w, v, f) => G.at(end + dir * f, w, v);
-  poly(g, [SK(-1.2, 1.02, .15), SK(1.2, 1.02, .15), SK(1.2, .7, .15), SK(-1.2, .7, .15)], C('#2b2826'));      // 床下の暗がり
-  poly(g, [SK(-.3, 1.0, -.15), SK(.3, 1.0, -.15), SK(.3, .66, -.15), SK(-.3, .66, -.15)], C('#3a3633'));             // 連結器
+  poly(g, [SK(-1.2, 1.02, .1), SK(1.2, 1.02, .1), SK(1.2, .9, .1), SK(-1.2, .9, .1)], C('#2b2826'));      // 床下の暗がり
+  poly(g, [SK(-.3, 1.0, -.1), SK(.3, 1.0, -.1), SK(.3, .74, -.1), SK(-.3, .74, -.1)], C('#3a3633'));             // 連結器
   // スカート：上は広く、下の両角を大きく斜めに落とした台形
-  poly(g, [SK(-1.3, .8, -.1), SK(1.3, .8, -.1), SK(1.3, .52, -.1), SK(1.0, .32, -.1), SK(-1.0, .32, -.1), SK(-1.3, .52, -.1)], C('#d9d3c8'));
-  poly(g, [SK(-1.3, .52, -.1), SK(1.3, .52, -.1), SK(1.0, .32, -.1), SK(-1.0, .32, -.1)], C('#bdb6aa'));
-  poly(g, [SK(-.36, .8, -.11), SK(.36, .8, -.11), SK(.3, .6, -.11), SK(-.3, .6, -.11)], C('#2f2c2a'));              // 連結器の前の切り欠き
-  pencilPath(g, [SK(-1.3, .8, -.1), SK(1.3, .8, -.1)], C('#2b2725'), .5, lwAt(d, .04));
+  poly(g, [SK(-1.3, .95, -.02), SK(1.3, .95, -.02), SK(1.3, .62, -.02), SK(1.0, .42, -.02), SK(-1.0, .42, -.02), SK(-1.3, .62, -.02)], C('#d9d3c8'));
+  poly(g, [SK(-1.3, .62, -.02), SK(1.3, .62, -.02), SK(1.0, .42, -.02), SK(-1.0, .42, -.02)], C('#bdb6aa'));
+  poly(g, [SK(-.36, .95, -.03), SK(.36, .95, -.03), SK(.3, .72, -.03), SK(-.3, .72, -.03)], C('#2f2c2a'));              // 連結器の前の切り欠き
+  pencilPath(g, [SK(-1.3, .96, -.02), SK(1.3, .96, -.02)], C('#2b2725'), .55, lwAt(d, .03));
   // 輪郭（鉛筆）：顔の縁と、黒い面の縁
   const edge = []; for (let i = 0; i < VS.length; i++) edge.push(S(secW(VS[i]) * .999, VS[i])); for (let i = VS.length - 1; i >= 0; i--) edge.push(S(-secW(VS[i]) * .999, VS[i]));
   pencilPath(g, edge, C('#2b2725'), .45, lwAt(d, .045));
