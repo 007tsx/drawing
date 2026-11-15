@@ -982,17 +982,17 @@ T(() => pass(g => {
   for (let sc = FRONT - 6; sc > -380; sc -= 20.6){
     const age = FRONT - sc, t = trk(sc);
     const cx = t.x, cz = t.z;
-    for (let ring = 0; ring < 4; ring++){
-      const r = 5 + age * .32 - ring * 4.5; if (r < 3) continue;
-      const fade = clamp(1 - age / 700, .4, 1);
+    for (let ring = 0; ring < 2; ring++){
+      const r = 5 + age * .32 - ring * 5; if (r < 3) continue;
+      const fade = clamp(1 - age / 650, .3, 1);
       const col = hx(ring % 2 ? '#2f9a58' : '#e8812f');
       let seg = [];
-      const flush = () => { if (seg.length > 2){ const d = seg[0][2], lw = Math.max(2.2, Math.min(9, lwAt(d, .9))); const c = mixc(col, hx('#f6e3c0'), (1 - fade) * .35);
-        pastel(g, seg.map(q => [q[0], q[1]]), lw, c, (.42 + .38 * fade), { strands: Math.max(2, Math.round(lw / 1.6)), taper: .15, lw: [1.2, 2.6] }); pencilPath(g, seg.map(q => [q[0], q[1] - lw * .3]), mixc(c, hx('#fff1d8'), .5), .45 * fade, 1); } seg = []; };
+      const flush = () => { if (seg.length > 2){ const d = seg[0][2], lw = Math.max(1.8, Math.min(6.5, lwAt(d, .65))); const c = mixc(col, hx('#f6e3c0'), (1 - fade) * .35);
+        pastel(g, seg.map(q => [q[0], q[1]]), lw, c, (.32 + .33 * fade), { strands: Math.max(2, Math.round(lw / 1.6)), taper: .15, lw: [1.2, 2.6] }); pencilPath(g, seg.map(q => [q[0], q[1] - lw * .3]), mixc(c, hx('#fff1d8'), .5), .25 * fade, 1); } seg = []; };
       const n = Math.round(clamp(r * .9, 60, 420));
       for (let i = 0; i <= n; i++){
         const a = i / n * 6.283, q = P3(cx + Math.cos(a) * r, -RAILH, cz + Math.sin(a) * r);
-        if (q[2] < 6 || q[1] < HOR + 4 || q[0] < -80 || q[0] > W + 80 || q[1] > H + 80 || rnd() < .025){ flush(); continue; }
+        if (q[2] < 6 || q[1] < HOR + 4 || q[0] < -80 || q[0] > W + 80 || q[1] > H + 80 || rnd() < .06){ flush(); continue; }
         seg.push(q); if (seg.length > 24) { flush(); seg = [q]; }
       }
       flush();
