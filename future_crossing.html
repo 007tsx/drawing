@@ -740,6 +740,24 @@ function drawCar(g, car, mir){
     pencilPath(g, pts.concat([pts[0]]), fogc(hx('#c7bcaf'), d, x0), .35, lw * .8);
   };
   for (const w of F.wins.concat(F.deckWins)){ const [a, b, v0, v1] = w; if (d < 420) seeThrough(a, b, v0, v1); else { const pts = roundWin(G, a, b, v0, v1, fogc(hx('#b98a66'), d, x0), g); } }
+  // 15両のうち、ひとつの窓だけ：だれかの読書灯がついている
+  if (car.c === 13){
+    const a = 9.0, b = 11.0, v0 = 1.95, v1 = 2.82;
+    const pts = roundWin(G, a, b, v0, v1, hx('#f6c06a'), g);
+    g.save(); g.clip(polyPath(pts));
+    const q = (u, v) => at(u, HW - .02, v);
+    poly(g, [q(a, v0), q(b, v0), q(b, v0 + .4), q(a, v0 + .4)], hx('#e39a48'));
+    // 灯りのまるい溜まり（読書灯の下）
+    const L = q(10.35, 2.5), rr = Math.max(5, lwAt(d, .55));
+    for (let k = 0; k < 18; k++){ const ang = R(0, 6.283), r = R(0, rr); pastel(g, [[L[0] + Math.cos(ang) * r, L[1] + Math.sin(ang) * r * .7], [L[0] + Math.cos(ang) * r + R(2, 5), L[1] + Math.sin(ang) * r * .7]], R(1.5, 3), mixc(hx('#fffaf0'), hx('#ffd98e'), r / rr), .9, { strands: 2, taper: .4 }); }
+    // 座席の背と、その上にのぞく何か（ひとりぶんの影）
+    poly(g, [q(a - .1, v0), q(b + .1, v0), q(b + .1, v0 + .2), q(a - .1, v0 + .2)], hx('#4a2d22'));
+    poly(g, [q(10.05, v0 + .2), q(10.55, v0 + .2), q(10.5, v0 + .48), q(10.12, v0 + .5)], hx('#5a3626'), .85);
+    const r1 = q(a - .1, v1 - .14), r2 = q(b + .1, v1 - .14); pencil(g, r1[0], r1[1], r2[0], r2[1], hx('#6b3f28'), .7, Math.max(.7, lwAt(d, .04)));
+    g.restore();
+    // 窓枠にもれる、ほんのすこしのあたたかさ
+    pencilPath(g, pts.concat([pts[0]]), hx('#ffe2a8'), .8, Math.max(1.2, lw * 1.4));
+  }
   // 運転台の顔（立体）
   if (car.cab === 'F') drawNose(g, G, car, 20, false, d, x0);
   // 屋根の上：冷房装置（写真02・10・11・14）
