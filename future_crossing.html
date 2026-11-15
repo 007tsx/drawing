@@ -1104,6 +1104,39 @@ T(() => pass(g => {
     g.restore(); s0 += ds;
   }
 }, { mask: 'med' }));
+// 車体の色の境目を、パステルを指でこすったようにやわらかくにじませる
+function carRegion(g, near){
+  for (let c = 1; c <= 15; c++){ const car = CARS[c], G = carGeom(car); if (G.depth > (near ? 400 : 1e9)) continue;
+    const us = []; for (let i = 0; i <= 20; i++) us.push(i);
+    const pts = us.map(u => G.at(u, HW, Math.max(1.1, prof(car, u).bot))).concat(us.slice().reverse().map(u => G.at(u, -HW, prof(car, u).crest + .05)));
+    pts.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); g.closePath(); }
+}
+// 車体の向き（画面上）に沿って、前後に少しずつこする
+T(() => { const G = carGeom(CARS[13]), a = G.at(0, HW, 2), b = G.at(20, HW, 2), L = Math.hypot(b[0] - a[0], b[1] - a[1]), ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L;
+  smear(g => carRegion(g, true), ux * 1.0, uy * 1.0, 1, .2, 0);
+  smear(g => carRegion(g, true), -uy * .7, ux * .7, 1, .14, 0); });
+// 帯と銀の境目、窓の縁に、まじった色の短い筆致を重ねる（境目が一本の線にならないように）
+T(() => pass(g => {
+  for (let c = 1; c <= 15; c++){
+    const car = CARS[c], G = carGeom(car), d = G.depth; if (d > 600) continue;
+    const x0 = G.at(10, 0, 2)[0], C = h => fogc(hx(h), d, x0), F = carFeatures(car);
+    const lw = Math.max(1, lwAt(d, .05)), wd = Math.max(1.4, lwAt(d, .07));
+    const edge = (a, b, v, col, al) => { const n = Math.max(2, Math.round((b - a) / 1.2));
+      for (let k = 0; k < n; k++){ const u0 = lerp(a, b, k / n) + R(-.2, .2), u1 = u0 + R(.6, 1.6); if (u1 > b + .2) continue;
+        const p1 = G.at(u0, HW, v + R(-.03, .03)), p2 = G.at(u1, HW, v + R(-.03, .03));
+        pastel(g, [p1, p2], wd * R(.7, 1.3), C(col), al * R(.6, 1), { strands: 2, taper: .5, lw: [lw * .6, lw * 1.2] }); } };
+    for (const [a, b] of F.bands){
+      edge(a, b, 1.57, '#7f8d78', .5);     // 緑と銀の下の境目：にごった中間色
+      edge(a, b, 1.80, '#a98a3f', .55);    // 緑とオレンジの境目
+      edge(a, b, 1.91, '#d4a77e', .5);     // オレンジと銀の境目
+    }
+    for (const tb of F.topBand){ edge(tb[0], tb[1], tb[2], '#8fa088', .45); edge(tb[0], tb[1], tb[3], '#8fa088', .45); }
+    // 窓とドアの縁：銀と内側の色のあいだを、色鉛筆でにじませる
+    for (const w of F.wins.concat(F.deckWins || [])){ const [a, b, v0, v1] = w;
+      for (const v of [v0, v1]){ const p1 = G.at(a + .05, HW, v), p2 = G.at(b - .05, HW, v); pencil(g, p1[0], p1[1], p2[0], p2[1], C('#9a8574'), .35, lw); } }
+    for (const dr of F.doors){ const [a, b] = dr; for (const u of [a, b]){ const p1 = G.at(u, HW, 1.1), p2 = G.at(u, HW, 2.95); pencil(g, p1[0], p1[1], p2[0], p2[1], C('#c9bfb2'), .3, lw * 1.4); } }
+  }
+}, { mask: 'light' }));
 // 橋の長い縁を、手で何度もなぞった線で描き直す（定規を使わない）
 T(() => pass(g => {
   const edges = [[-1, -.2, '#2a2423', .6], [1, -.2, '#2a2423', .6], [0, 'bot', '#221c1b', .75], [0, 'far', '#f3d09c', .55]];
