@@ -23,7 +23,10 @@
   発光・加算合成・shadowBlur・フローフィールドは使わない。
 */
 (() => {
-const W = 2560, H = 1440;
+// ?h=1656 のように指定すると、縦の長さを変えて描く（Mac の画面比率など）。既定は 16:9
+const W = 2560, H = (() => { const m = /[?&]h=(\d+)/.exec(location.search); return m ? Math.max(1000, Math.min(2400, +m[1])) : 1440; })();
+document.getElementById('art').style.aspectRatio = W + ' / ' + H;
+document.getElementById('art').style.width = 'min(100vw, calc(100vh * ' + (W / H) + '))';
 // ---------------------------------------------------------------- 乱数とノイズ
 let seed = 20261114;
 function rnd(){ seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
