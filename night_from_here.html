@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ここから見える夜</title>
+<style>
+  html,body{margin:0;height:100%;background:#0f0c16}
+  body{display:flex;align-items:center;justify-content:center;overflow:hidden}
+  canvas{display:block;width:min(100vw,calc(100vh*16/9));height:auto;aspect-ratio:16/9}
+</style>
+</head>
+<body>
+<canvas id="art" aria-label="雨あがりの夜、歩道橋の上から、まっすぐ続く大通りと街を見ている。ピントが合っているのは目の前の濡れた手すりだけで、街の灯りはすべて同じ形の大きなぼけになっている。手すりの雨粒には小さく逆さまの街が映り、紫の空の高いところにも、同じ街がうっすら逆さまに浮かんでいる。"></canvas>
+<script>
+'use strict';
+/*
+  「ここから見える夜」
+  なぜ生きているのか、理由はないのに、これはなんなのか。
+  見えている景色は全部、見ている側がつくったもの。真実もその上にしか立てない。
+  そしてその内側は、思っているより案外せまい。
+  画材：濃い藍の紙 / ソフトパステル / 色鉛筆 / 木炭 ＋オリジナル画材「夜露チョーク」（雨粒と手すりの光にだけ使う、ごく淡い光の色のチョーク）
+  人物・文字は描かない。
+*/
+(() => {
+const W = 2560, H = 1440;
+// ---------------------------------------------------------------- 乱数とノイズ
+let seed = 20261114;
+function rnd(){ seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+const R = (a, b) => a + (b - a) * rnd();
+const gauss = () => { let u = 0; for (let i = 0; i < 4; i++) u += rnd(); return (u - 2) / 0.577; };
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const PERM = new Float32Array(2048); for (let i = 0; i < 2048; i++) PERM[i] = rnd();
+function vn1(x){ const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return lerp(PERM[i & 2047], PERM[(i + 1) & 2047], u); }
+function h2(i, j){ let h = (i * 374761393 + j * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function vn2(x, y){ const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+  return lerp(lerp(h2(i, j), h2(i + 1, j), u), lerp(h2(i, j + 1), h2(i + 1, j + 1), u), v); }
+function fbm(x, y, o = 4){ let s = 0, a = .5, f = 1, n = 0; for (let k = 0; k < o; k++){ s += a * vn2(x * f + k * 17.3, y * f - k * 9.1); n += a; a *= .5; f *= 2.03; } return s / n; }
+
+// ---------------------------------------------------------------- 色
+const hx = h => { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+const mixc = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+const css = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const jit = (c, j = 7) => [c[0] + R(-j, j), c[1] + R(-j, j), c[2] + R(-j, j)];
+
+// ---------------------------------------------------------------- キャンバス
+const cv = document.getElementById('art'); cv.width = W; cv.height = H;
+const ctx = cv.getContext('2d');
+const mk = (w = W, h = H) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+ctx.fillStyle = '#26203a'; ctx.fillRect(0, 0, W, H);
+
+// ---------------------------------------------------------------- 紙の目
+let TOOTH = null; const MASK = {};
+function buildPaper(){
+  const c = mk(), g = c.getContext('2d');
+  g.fillStyle = '#808080'; g.fillRect(0, 0, W, H);
+  const octs = [[W / 170, 1], [W / 40, .22], [W / 9, .18], [W / 3.2, .35], [W / 1.7, .55], [W / 1.15, .45]];
+  for (const [res, a] of octs){
+    const w = Math.ceil(res), h = Math.ceil(res * H / W), s = mk(w, h), sg = s.getContext('2d'), id = sg.createImageData(w, h);
+    for (let i = 0; i < w * h; i++){ const v = rnd() * 255; id.data[i * 4] = id.data[i * 4 + 1] = id.data[i * 4 + 2] = v; id.data[i * 4 + 3] = 255; }
+    sg.putImageData(id, 0, 0); g.globalAlpha = a; g.imageSmoothingEnabled = true; g.drawImage(s, 0, 0, W, H);
+  }
+  g.globalAlpha = 1;
+  for (let i = 0; i < 14000; i++){   // 繊維
+    const x = R(0, W), y = R(0, H), a = R(0, 6.283), l = R(5, 38);
+    g.strokeStyle = rnd() < .5 ? 'rgba(255,255,255,.11)' : 'rgba(0,0,0,.09)'; g.lineWidth = R(.5, 1.4);
+    g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a) * l * .5 + R(-5, 5), y + Math.sin(a) * l * .5 + R(-5, 5), x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+  const d = g.getImageData(0, 0, W, H).data, n = W * H;
+  const hist = new Uint32Array(256); for (let i = 0; i < n; i++) hist[d[i * 4]]++;
+  let acc = 0, lo = 0, hi = 255; for (let v = 0; v < 256; v++){ acc += hist[v]; if (acc < n * .01) lo = v; if (acc < n * .99) hi = v; }
+  TOOTH = new Float32Array(n); for (let i = 0; i < n; i++) TOOTH[i] = clamp((d[i * 4] - lo) / (hi - lo + 1), 0, 1);
+  // 紙そのもの
+  const pid = ctx.createImageData(W, H), p = pid.data, base = [40, 34, 58];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++){
+    const i = y * W + x, t = TOOTH[i], k = 0.86 + 0.2 * t + (vn2(x / 400, y / 400) - .5) * .06;
+    p[i * 4] = base[0] * k; p[i * 4 + 1] = base[1] * k; p[i * 4 + 2] = base[2] * k * .98; p[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(pid, 0, 0);
+}
+function makeMask(fn){
+  const c = mk(), g = c.getContext('2d'), id = g.createImageData(W, H), a = id.data;
+  for (let i = 0; i < W * H; i++) a[i * 4 + 3] = 255 * fn(TOOTH[i]);
+  g.putImageData(id, 0, 0); return c;
+}
+
+// ---------------------------------------------------------------- 描画パス
+const LAY = mk(), lg = LAY.getContext('2d');
+function pass(fn, { mask = 'med', op = 'source-over', alpha = 1, clip = null } = {}){
+  lg.setTransform(1, 0, 0, 1, 0, 0); lg.globalCompositeOperation = 'source-over'; lg.globalAlpha = 1; lg.filter = 'none';
+  lg.clearRect(0, 0, W, H);
+  lg.save(); fn(lg); lg.restore();
+  if (mask){ lg.save(); lg.globalCompositeOperation = 'destination-in'; lg.drawImage(MASK[mask], 0, 0); lg.restore(); }
+  ctx.save(); if (clip){ clip(ctx); ctx.clip(); }
+  ctx.globalCompositeOperation = op; ctx.globalAlpha = alpha; ctx.drawImage(LAY, 0, 0); ctx.restore();
+}
+const SM = mk(), smg = SM.getContext('2d');
+function smear(clipFn, dx, dy, reps, al, blur = 0){   // 指でこする
+  smg.clearRect(0, 0, W, H); smg.drawImage(cv, 0, 0);
+  ctx.save(); ctx.beginPath(); clipFn(ctx); ctx.clip();
+  if (blur) ctx.filter = `blur(${blur}px)`;
+  for (let i = 1; i <= reps; i++){ ctx.globalAlpha = al; ctx.drawImage(SM, dx * i, dy * i); }
+  ctx.restore();
+}
+function fingers(g, n, x0, y0, x1, y1, ang = 0, rx = [50, 190], ry = [8, 26]){
+  for (let i = 0; i < n; i++){ const x = R(x0, x1), y = R(y0, y1); g.moveTo(x + 300, y); g.ellipse(x, y, R(rx[0], rx[1]), R(ry[0], ry[1]), ang + R(-.08, .08), 0, 6.283); }
+}
+
+// ---------------------------------------------------------------- 画材の基本ストローク
+function pathPts(x, y, ang, len, curv, n){ const p = []; let a = ang; const st = len / n; for (let i = 0; i <= n; i++){ p.push([x, y]); a += curv + R(-.025, .025); x += Math.cos(a) * st; y += Math.sin(a) * st; } return p; }
+function arcPts(cx, cy, rr, a0, span, n, sq = 1){ const p = []; for (let i = 0; i <= n; i++){ const a = a0 + span * i / n, k = R(.975, 1.025); p.push([cx + Math.cos(a) * rr * k, cy + Math.sin(a) * rr * sq * k]); } return p; }
+
+// パステル（棒の側面）：束になった細い筋の集まり。筋ごとに筆圧が違う
+function pastel(g, pts, w, col, al = .8, { strands = 0, taper = .3, lw = [1.2, 3.2] } = {}){
+  const n = strands || Math.max(3, Math.round(w / 2.2)), N = pts.length;
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  for (let s = 0; s < n; s++){
+    const off = (n === 1 ? 0 : (s / (n - 1) - .5)) * w + R(-1, 1);
+    const st = Math.floor(R(0, taper) * N * .5), en = N - 1 - Math.floor(R(0, taper) * N * .5);
+    if (en <= st) continue;
+    g.strokeStyle = css(jit(col, 6), al * R(.3, 1)); g.lineWidth = R(lw[0], lw[1]);
+    g.beginPath();
+    for (let i = st; i <= en; i++){
+      const p = pts[i], q = pts[Math.min(i + 1, N - 1)], pp = pts[Math.max(i - 1, 0)];
+      const dx = q[0] - pp[0], dy = q[1] - pp[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
+      const pr = .72 + .28 * Math.sin(Math.PI * i / (N - 1 || 1)), o = off * pr;
+      const X = p[0] + nx * o, Y = p[1] + ny * o; i === st ? g.moveTo(X, Y) : g.lineTo(X, Y);
+    }
+    g.stroke();
+  }
+}
+// 鉛筆／色鉛筆：一度引いて、真ん中をもう一度なぞる（筆圧の重なり）
+// 手の揺れ：位置で決まるなめらかなゆらぎ（同じ場所を通る線は同じように揺れる）
+const handW = (x, y) => [(vn2(x / 55 + 3.1, y / 55) - .5) * 3.2 + (vn2(x / 9, y / 9 + 7) - .5) * .7, (vn2(x / 55, y / 55 + 5.3) - .5) * 3.2 + (vn2(x / 9 + 2, y / 9) - .5) * .7];
+function densify(pts, step = 7){ const out = [];
+  for (let i = 0; i < pts.length - 1; i++){ const p = pts[i], q = pts[i + 1], L = Math.hypot(q[0] - p[0], q[1] - p[1]), n = Math.max(1, Math.min(60, Math.ceil(L / step)));
+    for (let k = 0; k < n; k++){ const t = k / n; out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]); } }
+  out.push(pts[pts.length - 1]); return out; }
+function pencilPath(g, pts, col, al, w){
+  if (pts.length < 2) return;
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const P = densify(pts).map(p => { const h = handW(p[0], p[1]); return [p[0] + h[0], p[1] + h[1]]; });
+  const n = P.length - 1;
+  const draw = (a, b, alpha, lw, dx, dy) => { g.strokeStyle = css(col, alpha); g.lineWidth = lw; g.beginPath();
+    for (let i = a; i <= b; i++){ const p = P[i], X = p[0] + dx + R(-.35, .35), Y = p[1] + dy + R(-.35, .35); i === a ? g.moveTo(X, Y) : g.lineTo(X, Y); } g.stroke(); };
+  // 1本目：全体をなぞる。端は少しはみ出す
+  const ex = (i, j, k) => { const a = P[i], b = P[j]; return [a[0] + (a[0] - b[0]) * k, a[1] + (a[1] - b[1]) * k]; };
+  if (n >= 1 && rnd() < .5){ P.unshift(ex(0, 1, R(.1, .6))); } 
+  const m = P.length - 1;
+  draw(0, m, al * .55, w * .8, 0, 0);
+  // 2本目：途中から途中まで、すこしずれて重なる（筆圧の溜まり）
+  if (m >= 2){ const a = Math.floor(m * R(0, .35)), b = Math.max(a + 1, Math.ceil(m * R(.5, 1))); draw(a, Math.min(b, m), al * .6, w, R(-.6, .6), R(-.6, .6)); }
+  // ときどき3本目：迷った線
+  if (m >= 4 && w > 1 && rnd() < .25){ const a = Math.floor(m * R(.1, .5)), b = Math.min(m, a + Math.ceil(m * R(.15, .4))); draw(a, b, al * .3, w * .7, R(-1.4, 1.4), R(-1.4, 1.4)); }
+}
+function pencil(g, x1, y1, x2, y2, col, al, w){
+  const L = Math.hypot(x2 - x1, y2 - y1) || 1, n = Math.max(2, Math.round(L / 14)), bend = R(-1, 1) * Math.min(L * .025, 4);
+  const nx = -(y2 - y1) / L, ny = (x2 - x1) / L, p = [];
+  for (let i = 0; i <= n; i++){ const t = i / n, b = Math.sin(Math.PI * t) * bend; p.push([x1 + (x2 - x1) * t + nx * b, y1 + (y2 - y1) * t + ny * b]); }
+  pencilPath(g, p, col, al, w);
+}
+function hatch(g, x0, y0, x1, y1, ang, sp, col, al, w, seg = [25, 80], prob = .85){
+  const ca = Math.cos(ang), sa = Math.sin(ang), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, Rr = Math.hypot(x1 - x0, y1 - y0) / 2;
+  for (let o = -Rr; o <= Rr; o += sp * R(.6, 1.4)){
+    let t = -Rr + R(0, seg[1]);
+    while (t < Rr){ const l = R(seg[0], seg[1]), px = cx - sa * o + ca * t, py = cy + ca * o + sa * t;
+      if (rnd() < prob) pencil(g, px, py, px + ca * l, py + sa * l, jit(col, 6), al * R(.55, 1), w * R(.8, 1.2));
+      t += l + R(3, 30); }
+  }
+}
+function smoothPath(pts, closed = true){
+  const p = new Path2D(), n = pts.length, m = i => { const a = pts[(i + n) % n], b = pts[(i + 1) % n]; return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; };
+  const s = m(0); p.moveTo(s[0], s[1]);
+  for (let i = 1; i <= n; i++){ const c = pts[i % n], e = m(i); p.quadraticCurveTo(c[0], c[1], e[0], e[1]); }
+  if (closed) p.closePath(); return p;
+}
+function clipMinus(g, path, dx, dy){ g.clip(minus(path, dx, dy), 'evenodd'); }
+function minus(path, dx, dy){ const p = new Path2D(); p.rect(-50, -50, W + 100, H + 100); p.addPath(path, new DOMMatrix().translate(dx, dy)); return p; }
+const pick = a => a[Math.floor(rnd() * a.length)];
+function poly(g, pts, col, a = 1){ g.fillStyle = css(col, a); g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); g.fill(); }
+
+// ================================================================ 視点：雨あがりの歩道橋の上（目の高さ 8m）から、大通りの先を見る
+const VPX = 1620, VPY = 760, F = 1700, CAMH = 22;
+const P = (x, y, z) => [VPX + F * x / z, VPY - F * (y - CAMH) / z, z];
+
+// ================================================================ 仕事の列
+const tasks = []; const T = f => tasks.push(f);
+T(buildPaper);
+T(() => {
+  MASK.full = makeMask(t => .86 + .14 * smooth(.1, .6, t));
+  MASK.heavy = makeMask(t => .12 + .88 * smooth(.02, .40, t));
+  MASK.med = makeMask(t => smooth(.22, .62, t));
+  MASK.light = makeMask(t => smooth(.48, .86, t));
+});
+
+// ---------------------------------------------------------------- 1. 紫の夜空（上は深い紫、地平は街の明かりで赤紫から橙へ）
+const SKYC = ['#120d22', '#1b1330', '#26183f', '#35204f', '#4a2860', '#62306a', '#7e3a70', '#9c4670', '#b8586c', '#cf7466', '#de9468'].map(hx);
+function skyIdx(y){ const t = clamp(y / VPY, 0, 1.05); return Math.pow(t, 1.8) * (SKYC.length - 1); }
+function skyCol(y, j = .45){ return SKYC[clamp(Math.round(skyIdx(y) + gauss() * j), 0, SKYC.length - 1)]; }
+T(() => pass(g => {
+  for (let y = -30; y < VPY + 40; y += 9){ let x = -R(0, 200);
+    while (x < W + 60){ const len = R(150, 420); pastel(g, pathPts(x, y + R(-5, 5), R(-.03, .03), len, 0, 7), R(24, 50), skyCol(y, .3), .92); x += len * R(.45, .8); } }
+}, { mask: 'full' }));
+T(() => smear(g => fingers(g, 260, -100, -20, W + 100, VPY + 20, 0), 6, 0, 4, .3, 3));
+T(() => pass(g => {
+  for (let i = 0; i < 2200; i++){ const x = R(-80, W), y = R(-20, VPY + 10);
+    pastel(g, pathPts(x, y, R(-.05, .05), R(60, 240), R(-.004, .004), 6), R(8, 26), skyCol(y, .8), .65); }
+}, { mask: 'med' }));
+T(() => smear(g => fingers(g, 160, -100, VPY * .4, W + 100, VPY + 20, 0, [100, 300], [6, 16]), -5, 0, 3, .25, 4));
+
+// ---------------------------------------------------------------- 2. 空の高いところに、同じ街がうっすら逆さまに浮かぶ（空は果てではなく、ふた）
+const SKYLINE = [];
+(() => { let x = -40; while (x < W + 40){ const w = R(30, 120), h = R(40, 230) * (1 - Math.abs(x - VPX) / W * .6) * (rnd() < .12 ? 1.8 : 1); SKYLINE.push({ x, w, h }); x += w * R(.7, 1.05); } })();
+T(() => pass(g => {
+  for (const b of SKYLINE){
+    const top = 0, bot = b.h * .55;     // 上の縁から、ぶら下がるように
+    const c = mixc(hx('#2c1d45'), hx('#5a3a78'), R(0, .5));
+    poly(g, [[b.x, top], [b.x + b.w, top], [b.x + b.w, bot], [b.x, bot]], c, .5);
+    pencil(g, b.x, top, b.x, bot, hx('#7a5a98'), .25, 1.1); pencil(g, b.x, bot, b.x + b.w, bot, hx('#7a5a98'), .3, 1.1);
+    for (let k = 0; k < b.w * b.h / 900; k++){ const x = R(b.x + 3, b.x + b.w - 3), y = R(top + 4, bot - 3);
+      g.fillStyle = css(hx(pick(['#e7b37a', '#f2d6a6', '#c69ad8', '#e6a0c0'])), R(.25, .5)); g.fillRect(x, y, R(1.5, 3), R(1.5, 3.5)); }
+  }
+}, { mask: 'med' }));
+T(() => smear(g => fingers(g, 120, -60, 0, W + 60, 200, 0, [80, 260], [6, 18]), 0, 3, 4, .25, 3));
+
+// ---------------------------------------------------------------- 3. 街（建物・道路）— ピントは手前の手すりにあるので、すべてやわらかくぼける
+const LIGHTS = [];   // ぼけの玉になる光：{x, y, z, col, r, a}
+const CITY = mk(), cg = CITY.getContext('2d');
+function bldgs(side){
+  const out = []; let z = side < 0 ? 170 : 30;
+  while (z < 1400){
+    const len = R(12, 40) * (1 + z / 300), gap = rnd() < .25 ? R(10, 24) : R(0, 2);
+    const xf = side * R(24, 34), h = side < 0 ? R(16, 60) * (rnd() < .15 ? 1.8 : 1) : R(6, 16);
+    out.push({ side, xf, z0: z, z1: z + len, h, deep: R(10, 25) }); z += len + gap;
+  }
+  return out;
+}
+const BL = bldgs(-1), BR = bldgs(1);
+// 右手：低い屋根が広がる街区（奥行きのある夜景）
+const ROOFS = [];
+for (let i = 0; i < 1700; i++){ const z = 70 + Math.pow(rnd(), .9) * 1500, sx = R(-80, W + 80), x = (sx - VPX) * z / F;
+  if (Math.abs(x) < 16) continue;   // 大通りの上には建てない
+  ROOFS.push({ x, z, w: R(8, 34), d: R(8, 26), h: R(5, 26) * (rnd() < .07 ? 3 : 1) }); }
+ROOFS.sort((a, b) => b.z - a.z);
+T(() => {
+  const g = cg;
+  // 遠くの街並み（地平線の上の帯）
+  for (let i = 0; i < 160; i++){ const x = R(-50, W), w = R(14, 70), h = R(10, 90) * Math.pow(1 - Math.min(1, Math.abs(x - VPX) / (W * .7)), .5);
+    poly(g, [[x, VPY + 2], [x, VPY - h], [x + w, VPY - h], [x + w, VPY + 2]], mixc(hx('#3a2650'), hx('#5c3866'), R(0, 1)), .9);
+    if (vn1(x / 140) > .45) for (let k = 0; k < w * h / 120; k++) LIGHTS.push({ x: R(x + 2, x + w - 2), y: R(VPY - h + 2, VPY), z: 900, col: pick(['#f0b878', '#f6dcac', '#d8a6e8', '#ef9ab4']), r: R(4, 8), a: R(.25, .55), far: true }); }
+  // 道路（濡れて光を映す）
+  poly(g, [P(-10, 0, 3), P(10, 0, 3), P(10, 0, 2000), P(-10, 0, 2000)], hx('#2c2236'));
+  for (let z = 12; z < 1500; z *= 1.08){ for (const x of [-5, 0, 5]){ const a = P(x - .12, 0, z), b = P(x + .12, 0, z * 1.03); poly(g, [a, [b[0], a[1]], b, [a[0], b[1]]], hx('#8a7088'), .5); } }
+  poly(g, [P(-15, 0, 3), P(-10, 0, 3), P(-10, 0, 2000), P(-15, 0, 2000)], hx('#2b2333'));
+  poly(g, [P(10, 0, 3), P(15, 0, 3), P(15, 0, 2000), P(10, 0, 2000)], hx('#2b2333'));
+  // 建物（遠くから手前へ）
+  const all = BL.concat(BR).sort((a, b) => b.z0 - a.z0);
+  for (const b of all){
+    const s = b.side, xf = b.xf;
+    const face = [P(xf, 0, b.z0), P(xf, b.h, b.z0), P(xf, b.h, b.z1), P(xf, 0, b.z1)];
+    const base = mixc(hx('#2a2036'), hx('#4a3456'), R(0, 1) * (1 - b.z0 / 900));
+    poly(g, face, base);
+    // 道路側に向いた端の面（手前の角）
+    const endf = [P(xf, 0, b.z0), P(xf, b.h, b.z0), P(xf + s * b.deep, b.h, b.z0), P(xf + s * b.deep, 0, b.z0)];
+    poly(g, endf, mixc(base, hx('#120e1a'), .35));
+    // 窓：明かりのついた窓、消えた窓
+    const fl = Math.floor(b.h / 3.2), cols = Math.floor((b.z1 - b.z0) / 3.4);
+    for (let f = 1; f < fl; f++) for (let c = 0; c < cols; c++){
+      if (rnd() < .45) continue;
+      const z0 = b.z0 + c * 3.4 + .7, z1 = z0 + 1.9, y0 = f * 3.2 + .6, y1 = y0 + 1.5;
+      const col = hx(pick(['#f2b56e', '#f6d59a', '#ffe6bf', '#e9c39a', '#c8a2e6', '#9fb0e8', '#f09ab8']));
+      poly(g, [P(xf, y0, z0), P(xf, y1, z0), P(xf, y1, z1), P(xf, y0, z1)], col, R(.45, .85));
+      if (rnd() < .05 && z0 < 350){ const c0 = P(xf, (y0 + y1) / 2, (z0 + z1) / 2); LIGHTS.push({ x: c0[0], y: c0[1], z: c0[2], col: '#' + col.map(v => (v | 0).toString(16).padStart(2, '0')).join(''), r: 0, a: R(.25, .45) }); }
+    }
+    // 看板の光（文字は描かない、色の面だけ）
+    if (rnd() < .35 && b.h > 12 && b.z0 < 400){ const y = R(4, Math.min(20, b.h - 2)), z = R(b.z0, b.z1 - 2), c0 = P(xf - s * .3, y, z);
+      LIGHTS.push({ x: c0[0], y: c0[1], z, col: pick(['#e85a9c', '#b46ae6', '#f08a4a', '#5ec8c0', '#f2d06a']), r: 0, a: R(.4, .7), sign: true }); }
+  }
+  for (const b of ROOFS){
+    const c0 = P(b.x, b.h, b.z), c1 = P(b.x + b.w, b.h, b.z), g0 = P(b.x, 0, b.z), t0 = P(b.x, b.h, b.z + b.d), t1 = P(b.x + b.w, b.h, b.z + b.d);
+    poly(g, [g0, c0, c1, [c1[0], g0[1]]], mixc(hx('#2a1f38'), hx('#4a3254'), R(0, 1)));
+    if (b.h < CAMH) poly(g, [c0, t0, t1, c1], mixc(hx('#3a2c4c'), hx('#5c4068'), R(0, 1)));
+    const fl = Math.max(1, Math.floor(b.h / 3.2)), cols = Math.max(1, Math.floor(b.w / 3.6));
+    for (let f = 0; f < fl; f++) for (let c = 0; c < cols; c++){ if (rnd() < .4) continue; const x0 = b.x + c * 3.6 + .6, y0 = f * 3.2 + .8;
+      poly(g, [P(x0, y0, b.z), P(x0 + 1.8, y0, b.z), P(x0 + 1.8, y0 + 1.4, b.z), P(x0, y0 + 1.4, b.z)], hx(pick(['#f2b56e', '#f6d59a', '#ffe6bf', '#c8a2e6', '#f09ab8'])), R(.5, .9)); }
+    if (rnd() < .05 && b.z < 500){ const q = P(b.x + b.w / 2, b.h + 1, b.z); LIGHTS.push({ x: q[0], y: q[1], z: b.z, col: pick(['#e8443a', '#f6c25a']), r: 0, a: .6 }); }   // 屋上の航空障害灯
+  }
+});
+// 道沿いの街灯・信号・車の灯り
+T(() => {
+  for (let i = 0; i < 160; i++){ const b = pick(ROOFS); if (b.z > 600 || rnd() < .45) continue; const q = P(b.x + R(0, b.w), R(1, b.h), b.z); if (q[0] < -40 || q[0] > W + 40) continue;
+    LIGHTS.push({ x: q[0], y: q[1], z: b.z, col: pick(['#f2b56e', '#f6d59a', '#c8a2e6', '#f09ab8', '#ffe6bf', '#9fb0e8']), r: 0, a: R(.35, .6) }); }
+  for (let z = 40; z < 200; z += R(34, 48)) for (const s of [-1, 1]){ const c = P(s * 11.5, 9, z); LIGHTS.push({ x: c[0], y: c[1], z, col: '#f4a85a', r: 0, a: .75, lamp: true }); }
+  for (const z of [90]) for (const s of [-1, 1]){ const c = P(s * 10.8, 5.5, z), col = z === 180 ? '#f6c25a' : pick(['#e8443a', '#5fe0a0']); LIGHTS.push({ x: c[0], y: c[1], z, col, r: 0, a: .85 }); }
+  // 遠ざかる車（赤い尾灯の対）と、近づく車（白い前照灯の対）
+  for (let i = 0; i < 4; i++){ const z = 40 + rnd() * 120, lane = R(1.6, 8.4);
+    for (const dx of [-.75, .75]){ const c = P(lane + dx, .9, z); LIGHTS.push({ x: c[0], y: c[1], z, col: '#ec3b3b', r: 0, a: .8 }); } }
+  for (let i = 0; i < 3; i++){ const z = 45 + rnd() * 120, lane = -R(1.6, 8.4);
+    for (const dx of [-.8, .8]){ const c = P(lane + dx, .8, z); LIGHTS.push({ x: c[0], y: c[1], z, col: '#fff3dc', r: 0, a: .85 }); } }
+});
+T(() => {
+  // 街の下絵をぼかして画面へ（ピントの外）
+  ctx.save(); ctx.filter = 'blur(9px)'; ctx.drawImage(CITY, 0, 0); ctx.restore();
+  ctx.save(); ctx.globalAlpha = .3; ctx.filter = 'blur(4px)'; ctx.drawImage(CITY, 0, 0); ctx.restore();
+});
+// 紙の目とパステルの筆致を、ぼけた街の上から重ねる
+T(() => pass(g => {
+  const d = ctx.getImageData(0, 0, W, H).data;
+  for (let i = 0; i < 4200; i++){ const x = R(0, W), y = R(VPY - 380, H), k = ((y | 0) * W + (x | 0)) * 4;
+    const c = [d[k], d[k + 1], d[k + 2]];
+    pastel(g, pathPts(x, y, R(-.06, .06) + (y > VPY ? 0 : -Math.PI / 2 * (rnd() < .3 ? 1 : 0)), R(20, 80), 0, 4), R(4, 14), jit(c, 10), .55); }
+}, { mask: 'heavy' }));
+
+// ---------------------------------------------------------------- 4. 濡れた路面の映り込み（光の縦の筋）
+T(() => pass(g => {
+  for (const L of LIGHTS){ if (L.far || L.y > H) continue; if (rnd() < .45) continue;
+    const ground = P(0, 0, L.z)[1]; if (ground <= L.y) continue;
+    const len = (ground - L.y) * R(.8, 1.4) + R(20, 80), w = Math.max(3, 24 * 30 / L.z);
+    pastel(g, pathPts(L.x + R(-3, 3), ground, Math.PI / 2 + R(-.03, .03), len, R(-.003, .003), 8), w, hx(L.col), L.a * .4, { strands: Math.max(2, Math.round(w / 2)), taper: .5 }); }
+}, { mask: 'med', op: 'screen' }));
+
+// ---------------------------------------------------------------- 5. ぼけの玉 — どの光も、同じ形（見ている側の形）になる
+const NOTCH = -.62;   // すべての玉の右上が、同じところで少し欠けている
+function bokehPath(x, y, r){
+  const p = new Path2D(), n = 48;
+  for (let i = 0; i <= n; i++){ const a = i / n * 6.283; let rr = r;
+    const da = Math.atan2(Math.sin(a - NOTCH), Math.cos(a - NOTCH)); if (Math.abs(da) < .42) rr = r * Math.cos(.42) / Math.cos(da);
+    const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr; i ? p.lineTo(px, py) : p.moveTo(px, py); }
+  p.closePath(); return p;
+}
+function bokeh(g, L){
+  const r = L.r || (L.far ? 0 : clamp(14 + 26 * (1 - 40 / L.z) + (L.lamp ? 6 : 0) + (L.sign ? 10 : 0), 10, 46) * R(.85, 1.15));
+  const c = hx(L.col), Pth = bokehPath(L.x, L.y, r);
+  g.fillStyle = css(c, L.a * .4); g.fill(Pth);
+  g.save(); g.clip(Pth);
+  for (let k = 0; k < 6; k++){ const a0 = R(0, 6.283); pastel(g, arcPts(L.x, L.y, r * R(.3, .85), a0, R(.8, 1.8), 6), r * R(.15, .3), mixc(c, hx('#fff6ea'), R(0, .4)), L.a * .3, { taper: .5 }); }
+  g.restore();
+  g.strokeStyle = css(mixc(c, hx('#ffffff'), .25), L.a * .6); g.lineWidth = Math.max(1.2, r * .09); g.stroke(Pth);   // 玉の縁（オニオンリング）
+}
+T(() => pass(g => { for (const L of LIGHTS.filter(l => l.far)) { g.fillStyle = css(hx(L.col), L.a); g.beginPath(); g.ellipse(L.x, L.y, L.r, L.r, 0, 0, 6.283); g.fill(); } }, { mask: 'med', op: 'screen' }));
+T(() => smear(g => g.rect(0, VPY - 120, W, 140), 0, -2, 3, .3, 4));
+T(() => pass(g => { const near = LIGHTS.filter(l => !l.far).sort((a, b) => b.z - a.z); for (const L of near) bokeh(g, L); }, { mask: 'heavy', op: 'screen' }));
+// 空の逆さの街にも、同じ形の小さな玉
+T(() => pass(g => { for (let i = 0; i < 70; i++){ const b = pick(SKYLINE); bokeh(g, { x: R(b.x, b.x + b.w), y: R(10, b.h * .55), z: 400, col: pick(['#f0b878', '#d8a6e8', '#ef9ab4', '#f6dcac']), r: R(8, 16), a: R(.15, .3) }); } }, { mask: 'heavy', op: 'screen' }));
+
+// ---------------------------------------------------------------- 6. 手前の手すり（ここだけピントが合っている）
+const RAIL = { y0: 1215, y1: 1050, th: 58 };    // 上の手すり：左が少し低く、右へ上がる
+const railY = x => lerp(RAIL.y0, RAIL.y1, x / W) + 4 * Math.sin(x / 700);
+T(() => pass(g => {
+  // 手すり子（縦の柱）
+  for (let x = -30; x < W + 40; x += R(150, 162)){
+    const yt = railY(x) + RAIL.th, w = 30;
+    poly(g, [[x, yt], [x + w, yt], [x + w + 6, H + 5], [x + 6, H + 5]], hx('#1a1622'));
+    pencil(g, x + w, yt, x + w + 6, H, hx('#c48a6a'), .55, 1.6);      // 街の暖かい光を受けた縁
+    pencil(g, x, yt, x + 6, H, hx('#7a5a9a'), .45, 1.4);             // 空の紫を受けた縁
+  }
+  // 下の横桟
+  const yb = 1360; poly(g, [[-20, yb], [W + 20, yb - 20], [W + 20, yb - 4], [-20, yb + 16]], hx('#1d1826'));
+  // 上の手すり（丸いパイプ）
+  const top = [], bot = []; for (let x = -20; x <= W + 20; x += 20){ top.push([x, railY(x)]); bot.push([x, railY(x) + RAIL.th]); }
+  poly(g, top.concat(bot.slice().reverse()), hx('#231d2e'));
+  pencilPath(g, top.map(p => [p[0], p[1] + 8]), hx('#f2c48e'), .85, 5);                 // 上面に街の灯り
+  pencilPath(g, top.map(p => [p[0], p[1] + 14]), hx('#ffe9c8'), .5, 2.2);
+  pencilPath(g, top.map(p => [p[0], p[1] + 26]), hx('#3a2f4a'), .5, 8);
+  pencilPath(g, bot.map(p => [p[0], p[1] - 7]), hx('#8a62b0'), .65, 4);               // 下面に空の紫
+  pencilPath(g, top, hx('#0e0b14'), .8, 1.6); pencilPath(g, bot, hx('#0e0b14'), .7, 1.6);
+  // 手すりの塗装のかすれと、こすれ
+  for (let k = 0; k < 220; k++){ const x = R(0, W), y = railY(x) + R(6, RAIL.th - 6);
+    pencil(g, x, y, x + R(10, 50), y + R(-1, 1), hx(pick(['#3a3046', '#4a3e58', '#6a5878'])), R(.25, .5), R(1, 2)); }
+}, { mask: 'heavy' }));
+// ---------------------------------------------------------------- 7. 雨粒：ひと粒ずつに、小さく逆さまの街が映っている
+const DROPS = [];
+(() => { let x = R(60, 160); while (x < W - 40){ DROPS.push({ x, r: R(20, 32) * (rnd() < .2 ? 1.4 : 1) }); x += R(170, 360); } })();
+T(() => pass(g => {
+  for (const d of DROPS){
+    const cx = d.x, cy = railY(d.x) + RAIL.th + d.r * .95, r = d.r;
+    const P2 = new Path2D(); P2.ellipse(cx, cy, r * .82, r, 0, 0, 6.283);
+    g.save(); g.clip(P2);
+    // 逆さの世界：上に地面の灯り（橙）、下に紫の空
+    const k = r / 12;
+    g.fillStyle = css(hx('#2a1a3c')); g.fillRect(cx - r, cy - r, r * 2, r * 2);
+    g.fillStyle = css(hx('#6a3a7a'), .9); g.fillRect(cx - r, cy, r * 2, r);
+    g.fillStyle = css(hx('#b8586c'), .9); g.fillRect(cx - r, cy - r * .1, r * 2, r * .25);
+    g.fillStyle = css(hx('#e39a5c'), .9); g.fillRect(cx - r, cy - r * .35, r * 2, r * .25);
+    for (let i = 0; i < 9; i++){ const bx = cx + R(-r * .7, r * .7), bh = R(.2, .55) * r; g.fillStyle = css(hx('#24182e'), .9); g.fillRect(bx, cy - r * .1 - bh, r * R(.12, .25), bh); }   // 逆さのビル
+    for (let i = 0; i < 6; i++){ g.fillStyle = css(hx(pick(['#ffd8a0', '#f08aa8', '#c89ae8', '#fff3dc'])), .95); g.beginPath(); g.ellipse(cx + R(-r * .6, r * .6), cy + R(-r * .5, r * .1), .9 * k + .6, .9 * k + .6, 0, 0, 6.283); g.fill(); }
+    g.restore();
+    g.strokeStyle = css(hx('#d8c6ec'), .55); g.lineWidth = 1.2; g.stroke(P2);
+    g.fillStyle = css(hx('#fffaf0'), .95); g.beginPath(); g.ellipse(cx - r * .3, cy - r * .45, r * .18, r * .13, -.5, 0, 6.283); g.fill();   // 夜露チョークのハイライト
+    pencil(g, cx - r * .1, cy + r * .72, cx + r * .3, cy + r * .5, hx('#f2c48e'), .5, 1);
+  }
+}, { mask: 'med' }));
+// 手すりの上面に残った雨のつぶ
+T(() => pass(g => { for (let i = 0; i < 160; i++){ const x = R(0, W), y = railY(x) + R(2, 8), r = R(1.5, 4);
+  g.fillStyle = css(hx('#fff4e4'), R(.4, .8)); g.beginPath(); g.ellipse(x, y, r, r * .6, 0, 0, 6.283); g.fill(); } }, { mask: 'med' }));
+
+// ---------------------------------------------------------------- 8. 仕上げ
+T(() => pass(g => {   // 四隅：木炭でやわらかく沈める
+  for (let i = 0; i < 2400; i++){ const cx = rnd() < .5 ? 0 : W, cy = rnd() < .5 ? 0 : H, dd = Math.pow(rnd(), 1.5) * .4;
+    const a = R(0, Math.PI / 2), x = Math.abs(cx - Math.cos(a) * dd * W), y = Math.abs(cy - Math.sin(a) * dd * H * 1.4), l = R(40, 150) * (1 - dd);
+    pencil(g, x, y, x + l * .75, y - l * .66, hx(pick(['#0a0810', '#140f1c'])), R(.08, .25) * (1 - dd * 2), R(1.5, 3.5)); }
+}, { mask: 'med' }));
+T(() => {
+  const gw = W / 2 | 0, gh = H / 2 | 0, c = mk(gw, gh), g = c.getContext('2d'), id = g.createImageData(gw, gh);
+  for (let i = 0; i < gw * gh; i++){ const v = 128 + gauss() * 30; id.data[i * 4] = v; id.data[i * 4 + 1] = v * .98; id.data[i * 4 + 2] = v * 1.02; id.data[i * 4 + 3] = 255; }
+  g.putImageData(id, 0, 0);
+  ctx.save(); ctx.globalCompositeOperation = 'soft-light'; ctx.globalAlpha = .22; ctx.imageSmoothingEnabled = false; ctx.drawImage(c, 0, 0, W, H); ctx.restore();
+});
+T(() => { cv.dataset.done = '1'; });
+function run(){
+  const t0 = performance.now();
+  while (tasks.length && performance.now() - t0 < 24) tasks.shift()();
+  if (tasks.length) requestAnimationFrame(run);
+}
+requestAnimationFrame(run);
+})();
+</script>
+</body>
+</html>
